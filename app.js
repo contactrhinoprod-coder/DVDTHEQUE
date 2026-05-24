@@ -2004,6 +2004,24 @@ const Quiz = (() => {
   }
   function shuffle(arr) { return sample(arr, arr.length); }
 
+  // Extrait les noms propres "intéressants" d'un synopsis (mots capitalisés
+  // qui ne sont pas en début de phrase), utiles pour des questions à trou.
+  function properNouns(text) {
+    if (!text) return [];
+    const words = text.split(/\s+/);
+    const out = [];
+    words.forEach((w, i) => {
+      const clean = w.replace(/[^A-Za-zÀ-ÿ'-]/g, '');
+      // capitalisé, longueur >= 3, pas en tout début, pas un mot courant
+      if (clean.length >= 3 && /^[A-ZÀ-Ý]/.test(clean) && i > 0) {
+        const prev = words[i - 1] || '';
+        const afterPunct = /[.!?]$/.test(prev);
+        if (!afterPunct) out.push(clean);
+      }
+    });
+    return [...new Set(out)];
+  }
+
   // Types de questions générables pour un film, selon ses données dispo
   function buildQuestion(film, all) {
     const types = [];
@@ -2011,8 +2029,12 @@ const Quiz = (() => {
     if (film.year) types.push('year');
     if (film.actors) types.push('actor');
     if (film.genre) types.push('genre');
-    if (film.synopsis && film.synopsis.length > 30) types.push('synopsis');
-    if (film.poster) types.push('poster');
+    if (film.synopsis && film.synopsis.length > 40) {
+      types.push('synopsis');        // deviner le film d'après le résumé
+      types.push('synopsis-start');  // comment commence le résumé (1ère phrase)
+      if (properNouns(film.synopsis).length) types.push('synopsis-name'); // nom propre cité
+    }
+    if (film.poster) types.push('poster'); // affiche zoomée
     if (!types.length) return null;
     const type = sample(types, 1)[0];
 
@@ -2022,7 +2044,7 @@ const Quiz = (() => {
       return sample(vals, 3);
     };
 
-    let q, answer, options, image = null;
+    let q, answer, options, image = null, zoom = null;
     switch (type) {
       case 'director': {
         q = `Qui a réalisé « ${film.title} » ?`;
@@ -2060,15 +2082,41 @@ const Quiz = (() => {
         break;
       }
       case 'synopsis': {
-        q = `Quel film correspond à ce résumé ?\n\n« ${film.synopsis.slice(0, 160)}… »`;
+        q = `Quel film correspond à ce résumé ?\n\n« ${film.synopsis.slice(0, 180)}… »`;
+        answer = film.title;
+        options = shuffle([answer, ...wrongFrom('title', answer)]);
+        break;
+      }
+      case 'synopsis-start': {
+        // Donne le titre, demande quelle est la première phrase de son résumé
+        const firstSentence = (film.synopsis.split(/(?<=[.!?])\s/)[0] || film.synopsis).slice(0, 120);
+        q = `Quel est le début du résumé de « ${film.title} » ?`;
+        answer = firstSentence + '…';
+        // Mauvaises réponses : débuts de résumés d'autres films
+        const otherStarts = others
+          .filter(m => m.synopsis && m.synopsis.length > 40)
+          .map(m => (m.synopsis.split(/(?<=[.!?])\s/)[0] || m.synopsis).slice(0, 120) + '…');
+        options = shuffle([answer, ...sample([...new Set(otherStarts)], 3)]);
+        break;
+      }
+      case 'synopsis-name': {
+        // Un nom propre cité dans le résumé -> dans quel film apparaît-il ?
+        const names = properNouns(film.synopsis);
+        const name = sample(names, 1)[0];
+        q = `Dans le résumé de quel film trouve-t-on « ${name} » ?`;
         answer = film.title;
         options = shuffle([answer, ...wrongFrom('title', answer)]);
         break;
       }
       case 'poster': {
-        q = `Quel est ce film ?`;
+        q = `Quel est ce film ? (détail de l'affiche)`;
         answer = film.title;
         image = film.poster;
+        zoom = {
+          size: 280 + Math.floor(Math.random() * 120),
+          x: Math.floor(Math.random() * 100),
+          y: Math.floor(Math.random() * 100),
+        };
         options = shuffle([answer, ...wrongFrom('title', answer)]);
         break;
       }
@@ -2076,7 +2124,7 @@ const Quiz = (() => {
     // Il faut au moins 2 options valides
     options = options.filter(Boolean);
     if (options.length < 2 || !answer) return null;
-    return { filmId: film.id, q, answer, options, image };
+    return { filmId: film.id, q, answer, options, image, zoom };
   }
 
   // Construit un pack de 10 questions, en privilégiant les films à faible score
@@ -2126,7 +2174,9 @@ const Quiz = (() => {
         <span>Question ${idx + 1}/${pack.length}</span>
         <span>Score : ${correct}</span>
       </div>
-      ${question.image ? `<div class="quiz-image" style="background-image:url('${question.image}')"></div>` : ''}
+      ${question.image ? (question.zoom
+        ? `<div class="quiz-image zoomed" style="background-image:url('${question.image}');background-size:${question.zoom.size}%;background-position:${question.zoom.x}% ${question.zoom.y}%"></div>`
+        : `<div class="quiz-image" style="background-image:url('${question.image}')"></div>`) : ''}
       <div class="quiz-q">${esc(question.q).replace(/\n/g, '<br>')}</div>
       <div class="quiz-options">
         ${question.options.map((o, i) => `<button class="quiz-opt" data-i="${i}">${esc(o)}</button>`).join('')}

@@ -480,3 +480,6 @@ html, body {
 .quiz-eval-pct { font-size: 2.4rem; font-weight: 800; color: var(--accent); margin: 4px 0; }
 .quiz-level { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
 .quiz-result .btn-ghost { margin-top: 10px; }
+
+/* Affiche zoomée pour le quiz (on ne voit qu'un détail) */
+.quiz-image.zoomed { width: 200px; height: 200px; aspect-ratio: auto; border-radius: 12px; }
