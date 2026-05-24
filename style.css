@@ -442,3 +442,12 @@ html, body {
 
 /* ====================== WISHLIST ====================== */
 .fmt-badge.wish { background: #d4a017; color: #fff; }
+
+/* ====================== PRIX ====================== */
+.price-inline { font-weight: 700; color: #fff; }
+.library-total {
+  margin: 16px 4px 8px; padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  font-size: .95rem; text-align: center;
+}
+.library-total b { color: var(--accent); font-size: 1.1rem; }

@@ -775,23 +775,22 @@ function renderLibrary() {
     const poster = m.poster
       ? `style="background-image:url('${m.poster.replace(/'/g, "%27")}')"` : '';
     const initial = (m.title || '?').charAt(0).toUpperCase();
-    const priceTag = (m.price != null && m.price !== '') ? `<span class="price-tag">${fmtPrice(m.price)}</span>` : '';
+    const priceTxt = (m.price != null && m.price !== '') ? fmtPrice(m.price) : '';
     if (State.layout === 'list') {
       return `<div class="card" data-id="${m.id}">
         <div class="poster-wrap"><div class="poster" ${poster}>${m.poster ? '' : initial}</div></div>
         <div class="meta">
           <div class="t">${esc(m.title)}</div>
-          <div class="sub">${m.year || '—'} · ${esc(m.genre || '')} · ${m.format || 'DVD'}</div>
-          <div class="sub">${'★'.repeat(m.rating||0)}${'☆'.repeat(5-(m.rating||0))}${priceTag ? ' · ' + fmtPrice(m.price) : ''}</div>
+          <div class="sub">${m.year || '—'} · ${esc(m.genre || '')} · ${m.format || 'DVD'}${priceTxt ? ' · <span class="price-inline">' + priceTxt + '</span>' : ''}</div>
+          <div class="sub">${'★'.repeat(m.rating||0)}${'☆'.repeat(5-(m.rating||0))}</div>
         </div></div>`;
     }
     return `<div class="card" data-id="${m.id}">
       <div class="poster-wrap">
         <div class="poster" ${poster}>${m.poster ? '' : initial}</div>
         <span class="fmt-badge">${m.format || 'DVD'}</span>
-        ${priceTag}
       </div>
-      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}</div></div>
+      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}${priceTxt ? ' <span class="price-inline">' + priceTxt + '</span>' : ''}</div></div>
     </div>`;
   }).join('');
 
