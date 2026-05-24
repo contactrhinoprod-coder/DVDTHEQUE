@@ -1114,21 +1114,21 @@ function openEditor(data, isEdit = false, onDone = null) {
     m.synopsis      = $('#f-synopsis').value.trim();
     m.barcode       = $('#f-barcode').value.trim();
 
-    // Détection de doublon (uniquement pour un nouvel ajout)
+    // Détection de doublon : UNIQUEMENT si même titre ET même format.
+    // (Même titre en format différent = légitime, on ajoute sans rien demander.)
     if (!isEdit) {
       const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-      const dups = State.movies.filter(x => norm(x.title) === norm(m.title));
-      if (dups.length) {
-        const sameFormat = dups.some(x => (x.format || 'DVD') === m.format);
-        const formatsExistants = [...new Set(dups.map(x => x.format || 'DVD'))].join(', ');
-        let msg;
-        if (sameFormat) {
-          msg = `« ${m.title} » est déjà dans votre collection en ${m.format}.\n\nVoulez-vous quand même l'ajouter une seconde fois ?`;
+      const sameFormatDup = State.movies.some(x =>
+        norm(x.title) === norm(m.title) && (x.format || 'DVD') === m.format);
+      if (sameFormatDup) {
+        const ok = confirm(`« ${m.title} » est déjà dans votre collection en ${m.format}.\n\nVoulez-vous modifier le format (DVD / Blu-ray / 4K) ?\n\nOK = revenir changer le format\nAnnuler = ne pas ajouter`);
+        if (ok) {
+          // Retour au panneau : l'utilisateur change le format puis revalide.
+          // On ne ferme pas l'éditeur, on laisse la main sur le formulaire.
+          toast('Changez le format puis validez');
+          return;
         } else {
-          msg = `« ${m.title} » est déjà dans votre collection (${formatsExistants}).\n\nVous l'ajoutez ici en ${m.format} — ce n'est pas le même format, c'est peut-être normal (ex : vous avez le DVD ET le Blu-ray).\n\nGarder les deux ?`;
-        }
-        if (!confirm(msg)) {
-          // L'utilisateur ne veut pas du doublon : on annule l'ajout
+          // On n'ajoute pas le doublon
           closeEditor();
           if (typeof onDone === 'function') { onDone(false); return; }
           go('library');
