@@ -50,6 +50,12 @@ function fmtDuration(min) {
   return h ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
 }
 
+// Formate un prix en euros (ex: 4.5 -> "4,50 €")
+function fmtPrice(v) {
+  if (v == null || v === '') return '';
+  return Number(v).toFixed(2).replace('.', ',') + ' €';
+}
+
 /* ============================================================
    2. STORE — IndexedDB (offline-first)
    Remplace SQLite : même rôle, natif navigateur, persistant.
@@ -769,19 +775,21 @@ function renderLibrary() {
     const poster = m.poster
       ? `style="background-image:url('${m.poster.replace(/'/g, "%27")}')"` : '';
     const initial = (m.title || '?').charAt(0).toUpperCase();
+    const priceTag = (m.price != null && m.price !== '') ? `<span class="price-tag">${fmtPrice(m.price)}</span>` : '';
     if (State.layout === 'list') {
       return `<div class="card" data-id="${m.id}">
         <div class="poster-wrap"><div class="poster" ${poster}>${m.poster ? '' : initial}</div></div>
         <div class="meta">
           <div class="t">${esc(m.title)}</div>
           <div class="sub">${m.year || '—'} · ${esc(m.genre || '')} · ${m.format || 'DVD'}</div>
-          <div class="sub">${'★'.repeat(m.rating||0)}${'☆'.repeat(5-(m.rating||0))}</div>
+          <div class="sub">${'★'.repeat(m.rating||0)}${'☆'.repeat(5-(m.rating||0))}${priceTag ? ' · ' + fmtPrice(m.price) : ''}</div>
         </div></div>`;
     }
     return `<div class="card" data-id="${m.id}">
       <div class="poster-wrap">
         <div class="poster" ${poster}>${m.poster ? '' : initial}</div>
         <span class="fmt-badge">${m.format || 'DVD'}</span>
+        ${priceTag}
       </div>
       <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}</div></div>
     </div>`;
@@ -789,6 +797,25 @@ function renderLibrary() {
 
   $$('.card', grid).forEach(c =>
     c.addEventListener('click', () => openDetail(c.dataset.id)));
+
+  // Récapitulatif en bas : nombre de films (toujours) + valeur (si prix renseignés)
+  const totalBox = $('#library-total');
+  const withPrice = list.filter(m => m.price != null && m.price !== '');
+  if (list.length) {
+    const nb = `<b>${list.length}</b> film${list.length > 1 ? 's' : ''}`;
+    let html = nb;
+    if (withPrice.length) {
+      const total = withPrice.reduce((s, m) => s + Number(m.price), 0);
+      html += ` · Valeur : <b>${fmtPrice(total)}</b>`;
+      if (withPrice.length < list.length) {
+        html += ` <span class="muted small">(${withPrice.length}/${list.length} avec prix)</span>`;
+      }
+    }
+    totalBox.innerHTML = html;
+    totalBox.hidden = false;
+  } else {
+    totalBox.hidden = true;
+  }
 
   renderActiveFilters();
 }
@@ -868,6 +895,7 @@ function renderDetail(m) {
         <div><div class="lbl">Réalisateur</div><div class="val">${esc(m.director) || '—'}</div></div>
         <div><div class="lbl">Acteurs</div><div class="val">${esc(m.actors) || '—'}</div></div>
         <div><div class="lbl">Durée</div><div class="val">${fmtDuration(m.duration)}</div></div>
+        <div><div class="lbl">Prix d'achat</div><div class="val">${m.price != null && m.price !== '' ? fmtPrice(m.price) : '—'}</div></div>
         <div><div class="lbl">Code-barres</div><div class="val">${m.barcode || '—'}</div></div>
       </div>
     </div>
@@ -1094,6 +1122,7 @@ function openEditor(data, isEdit = false, onDone = null) {
     ${field('director', 'Réalisateur', m.director)}
     ${field('actors', 'Acteurs', m.actors)}
     ${field('duration', 'Durée (min)', m.duration, 'number')}
+    ${field('price', "Prix d'achat (€)", m.price, 'number')}
     ${field('poster', 'URL jaquette', m.poster)}
     <div id="poster-preview"></div>
     <div class="field"><label>Synopsis</label><textarea id="f-synopsis">${esc(m.synopsis||'')}</textarea></div>
@@ -1152,6 +1181,8 @@ function openEditor(data, isEdit = false, onDone = null) {
     m.poster        = $('#f-poster').value.trim();
     m.synopsis      = $('#f-synopsis').value.trim();
     m.barcode       = $('#f-barcode').value.trim();
+    const pv = $('#f-price').value.trim();
+    m.price = pv === '' ? null : (parseFloat(pv.replace(',', '.')) || null);
     m.wishlist      = $('#f-dest').value === 'wishlist'; // destination choisie
 
     // Détection de doublon : même titre + même format, DANS LA MÊME collection
@@ -1769,7 +1800,7 @@ function imageToDataURL(url) {
 /* Exporte la collection visible (respecte le filtre actif) en PDF,
    sous forme de grille de vignettes : affiche + titre + réalisateur
    + année + genre + format. */
-async function exportPDF(mode = 'library') {
+async function exportPDF(mode = 'library', withPrice = false) {
   const isWish = mode === 'wishlist';
   const movies = isWish
     ? State.movies.filter(m => m.wishlist)
@@ -1847,6 +1878,12 @@ async function exportPDF(mode = 'library') {
     const meta = [m.director, m.year, m.genre, m.format].filter(Boolean).join(' · ');
     const metaLines = pdf.splitTextToSize(meta, cellW);
     pdf.text(metaLines.slice(0, 2), x, ty);
+    // Prix sous la meta (si demandé et renseigné)
+    if (withPrice && m.price != null && m.price !== '') {
+      ty += (metaLines.length > 1 ? 6 : 3.5);
+      pdf.setFontSize(8); pdf.setTextColor(0);
+      pdf.text(fmtPrice(m.price), x, ty);
+    }
     pdf.setTextColor(0);
 
     // Avance dans la grille
@@ -1854,6 +1891,22 @@ async function exportPDF(mode = 'library') {
     if (col >= cols) { col = 0; row++; }
     if (row >= rowsPerPage && i < movies.length - 1) {
       pdf.addPage(); row = 0; col = 0;
+    }
+  }
+
+  // Total de la collection (si prix demandés)
+  if (withPrice) {
+    const withP = movies.filter(m => m.price != null && m.price !== '');
+    if (withP.length) {
+      const total = withP.reduce((s, m) => s + Number(m.price), 0);
+      // Position sous la dernière rangée utilisée
+      let totalY = startY + (col === 0 ? row : row + 1) * (cellH + gap) + 4;
+      if (totalY > pageH - margin - 10) { pdf.addPage(); totalY = margin + 10; }
+      pdf.setFontSize(12); pdf.setTextColor(0);
+      pdf.text(`Valeur totale de la collection : ${fmtPrice(total)}`, margin, totalY);
+      pdf.setFontSize(8); pdf.setTextColor(120);
+      pdf.text(`(${withP.length} film(s) avec prix sur ${movies.length})`, margin, totalY + 5);
+      pdf.setTextColor(0);
     }
   }
 
@@ -2107,8 +2160,11 @@ function bindEvents() {
   $('#random-open').addEventListener('click', () => randomPick && openDetail(randomPick.id));
 
   // Profile
-  $('#set-pdf').addEventListener('click', () => exportPDF('library'));
-  $('#set-pdf-wish').addEventListener('click', () => exportPDF('wishlist'));
+  $('#set-pdf').addEventListener('click', () => {
+    const withPrice = confirm("Inclure les prix d'achat et le total dans le PDF ?\n\nOK = avec les prix\nAnnuler = sans les prix");
+    exportPDF('library', withPrice);
+  });
+  $('#set-pdf-wish').addEventListener('click', () => exportPDF('wishlist', false));
   $('#set-theme').addEventListener('click', toggleTheme);
   $('#set-cloud').addEventListener('click', () => {
     if (Cloud.user && Cloud.user()) cloudSignOut();
