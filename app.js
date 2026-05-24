@@ -885,10 +885,10 @@ function renderDetail(m) {
         <textarea id="new-comment" placeholder="Votre avis sur ce film…"></textarea>
       </div>
       <button class="btn-secondary" id="add-text-comment" style="width:100%">Ajouter le commentaire</button>
+      ${m.wishlist ? `<button class="btn-primary" id="detail-found" style="width:100%;margin-top:10px">✅ J'ai trouvé ce film → l'ajouter à ma collection</button>` : ''}
     </div>
 
     <div class="detail-actions">
-      ${m.wishlist ? `<button class="btn-primary" id="detail-found" style="grid-column:1/-1">✅ J'ai trouvé ce film → l'ajouter à ma collection</button>` : ''}
       <button class="btn-secondary" id="detail-edit">Modifier</button>
       <button class="btn-secondary" id="detail-share">Partager</button>
       <button class="btn-secondary" id="detail-delete" style="color:var(--accent)">Supprimer</button>

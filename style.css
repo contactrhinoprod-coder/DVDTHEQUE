@@ -171,9 +171,10 @@ html, body {
   background: var(--surface-2) center/cover; border: 1px solid var(--border);
   box-shadow: 0 8px 24px rgba(0,0,0,.5);
 }
-.detail-headline h2 { margin: 0 0 4px; font-size: 1.3rem; }
-.detail-headline .orig { color: var(--text-dim); font-size: .85rem; font-style: italic; }
-.detail-headline .facts { color: var(--text-dim); font-size: .85rem; margin-top: 6px; }
+.detail-headline { min-width: 0; flex: 1; }
+.detail-headline h2 { margin: 0 0 4px; font-size: 1.3rem; overflow-wrap: break-word; word-break: break-word; }
+.detail-headline .orig { color: var(--text-dim); font-size: .85rem; font-style: italic; overflow-wrap: break-word; }
+.detail-headline .facts { color: var(--text-dim); font-size: .85rem; margin-top: 6px; overflow-wrap: break-word; }
 .detail-section { margin-top: 18px; }
 .detail-section h4 { margin: 0 0 8px; font-size: .8rem; text-transform: uppercase;
   letter-spacing: 1px; color: var(--text-dim); }
@@ -185,7 +186,8 @@ html, body {
 .rating-stars { font-size: 1.5rem; color: var(--border); cursor: pointer; user-select: none; }
 .rating-stars .on { color: var(--star); }
 
-.detail-actions { display: flex; gap: 8px; margin-top: 16px; }
+.detail-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.detail-actions button { flex: 1; min-width: 90px; }
 
 /* Audio comments */
 .audio-list { display: flex; flex-direction: column; gap: 8px; }
@@ -437,3 +439,6 @@ html, body {
 }
 .genre-item.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
 .genre-item:active { opacity: .8; }
+
+/* ====================== WISHLIST ====================== */
+.fmt-badge.wish { background: #d4a017; color: #fff; }
