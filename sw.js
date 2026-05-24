@@ -1,27 +1,25 @@
-/* DVDthèque — service worker (mode DÉVELOPPEMENT, ZÉRO cache)
-   - Ne met jamais rien en cache.
-   - Supprime tous les anciens caches au démarrage.
-   - Prend le contrôle immédiatement (skipWaiting + clients.claim).
-   - Réseau uniquement : on voit toujours la dernière version. */
+/* DVDthèque — service worker (ZÉRO cache + auto-update)
+   IMPORTANT : à chaque mise à jour de l'app, changer le numéro
+   SW_VERSION ci-dessous (ex: v8 -> v9). Ça suffit à ce que le
+   navigateur détecte un nouveau service worker, l'active, et
+   recharge l'app automatiquement. Plus besoin de vider le cache. */
 
-const SW_VERSION = 'dev-nocache-v3';
+const SW_VERSION = 'v8';
 
 self.addEventListener('install', () => {
-  self.skipWaiting(); // ne pas attendre la fermeture des onglets
+  self.skipWaiting(); // active la nouvelle version sans attendre
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    // Purge tous les caches existants (vestiges des anciennes versions)
     const keys = await caches.keys();
-    await Promise.all(keys.map(k => caches.delete(k)));
-    await self.clients.claim(); // prend la main sur les pages ouvertes
+    await Promise.all(keys.map(k => caches.delete(k))); // purge tout cache
+    await self.clients.claim(); // prend la main -> déclenche controllerchange
   })());
 });
 
-// Toujours réseau, jamais de cache. (HTML/JS/CSS toujours frais.)
+// Toujours réseau, jamais de cache.
 self.addEventListener('fetch', (e) => {
-  // On ne touche pas aux requêtes cross-origin (TMDB, Firebase, gstatic…)
   e.respondWith(
     fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request))
   );

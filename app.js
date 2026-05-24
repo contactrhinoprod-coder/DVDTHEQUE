@@ -1688,11 +1688,23 @@ async function boot() {
   bindEvents();
   bindLogin();
 
-  // Service worker (offline). On force la vérification de mise à jour
-  // à chaque chargement pour ne jamais rester bloqué sur une vieille version.
+  // Service worker : zéro cache + auto-update.
+  // Quand un nouveau service worker prend le contrôle, on recharge
+  // la page une seule fois pour servir la dernière version (sans
+  // que l'utilisateur ait à vider quoi que ce soit).
   if ('serviceWorker' in navigator) {
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
     navigator.serviceWorker.register('./sw.js').then((reg) => {
-      reg.update(); // cherche une nouvelle version tout de suite
+      reg.update(); // cherche une nouvelle version immédiatement
+      // Vérifie aussi à chaque retour sur l'app (onglet réactivé)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update();
+      });
     }).catch(() => {});
   }
 
