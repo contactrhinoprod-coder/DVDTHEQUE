@@ -528,9 +528,52 @@ const OCR = (() => {
     });
   }
 
-  // image = dataURL, Blob, canvas… (tout ce qu'accepte Tesseract)
-  // onProgress = callback(0..1) pour la barre de progression
-  async function recognize(image, onProgress) {
+  /* Pré-traitement : charge l'image, l'agrandit si trop petite, passe en
+     niveaux de gris avec contraste accentué (seuil adaptatif simple).
+     C'est CE traitement qui améliore le plus la lecture d'un titre.
+     Renvoie un canvas prêt pour Tesseract. */
+  function preprocess(dataURL) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        // Cible ~1600px de large pour que le texte soit assez gros
+        const targetW = 1600;
+        const scale = img.width < targetW ? targetW / img.width : 1;
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Niveaux de gris + contraste + binarisation douce
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        // 1er passage : moyenne de luminance pour le seuil
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+          sum += g;
+        }
+        const mean = sum / (d.length / 4);
+        // 2e passage : contraste fort autour de la moyenne
+        const contrast = 1.4;
+        for (let i = 0; i < d.length; i += 4) {
+          let g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+          g = (g - mean) * contrast + mean;       // étire le contraste
+          g = Math.max(0, Math.min(255, g));
+          d[i] = d[i+1] = d[i+2] = g;             // gris
+        }
+        ctx.putImageData(imgData, 0, 0);
+        res(canvas);
+      };
+      img.onerror = () => rej(new Error('Image illisible'));
+      img.src = dataURL;
+    });
+  }
+
+  // image = dataURL ; onProgress = callback(0..1)
+  async function recognize(dataURL, onProgress) {
     await loadLib();
     if (!worker) {
       worker = await window.Tesseract.createWorker('fra+eng', 1, {
@@ -539,12 +582,20 @@ const OCR = (() => {
         },
       });
     }
-    const { data } = await worker.recognize(image);
+    // Paramètres Tesseract orientés "bloc de texte" (titres)
+    try {
+      await worker.setParameters({
+        tessedit_pageseg_mode: '6', // bloc uniforme de texte
+        preserve_interword_spaces: '1',
+      });
+    } catch (e) { /* selon version, certains params peuvent manquer */ }
+
+    const canvas = await preprocess(dataURL);
+    const { data } = await worker.recognize(canvas);
     return extractCandidates(data);
   }
 
-  // Trie les lignes par hauteur de bbox décroissante (titre = gros texte),
-  // nettoie le bruit (lignes trop courtes, mentions légales en majuscules longues).
+  // Trie les lignes par taille de texte (titre = gros) × confiance.
   function extractCandidates(data) {
     const lines = (data.lines || [])
       .map(l => {
@@ -554,11 +605,10 @@ const OCR = (() => {
         return { text, h, conf: l.confidence || 0 };
       })
       .filter(l => l.text.length >= 2 && /[a-zA-ZÀ-ÿ0-9]/.test(l.text))
-      .filter(l => !/^(dvd|blu-?ray|4k uhd|tous droits|all rights)/i.test(l.text));
+      .filter(l => !/^(dvd|blu-?ray|4k|uhd|tous droits|all rights|©|warner|universal|sony|paramount|fox|disney)/i.test(l.text))
+      .filter(l => l.conf > 30); // ignore le texte trop incertain
 
-    // Score = hauteur de texte pondérée par la confiance OCR
     lines.sort((a, b) => (b.h * (b.conf / 100 + 0.5)) - (a.h * (a.conf / 100 + 0.5)));
-    // Dédoublonne et garde le top 6
     const seen = new Set(), out = [];
     for (const l of lines) {
       const k = l.text.toLowerCase();
@@ -566,7 +616,6 @@ const OCR = (() => {
       seen.add(k); out.push(l.text);
       if (out.length >= 6) break;
     }
-    // Texte brut complet en dernier recours
     return { candidates: out, rawText: (data.text || '').trim() };
   }
 
@@ -1040,7 +1089,8 @@ function startPhotoFlow() {
     const file = input.files && input.files[0];
     if (!file) return;
     const dataURL = await fileToDataURL(file);
-    runOCR(dataURL);
+    showOcrModal();
+    setOcrState('crop', { dataURL });   // étape de recadrage avant OCR
   };
   input.click();
 }
@@ -1050,6 +1100,25 @@ function fileToDataURL(file) {
     const r = new FileReader();
     r.onload = () => res(r.result);
     r.readAsDataURL(file);
+  });
+}
+
+/* Recadre l'image sur la zone choisie (en %) et renvoie un dataURL */
+function cropImage(dataURL, cropPct) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const sx = img.width  * cropPct.x;
+      const sy = img.height * cropPct.y;
+      const sw = img.width  * cropPct.w;
+      const sh = img.height * cropPct.h;
+      const canvas = document.createElement('canvas');
+      canvas.width = sw; canvas.height = sh;
+      canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      res(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => rej(new Error('Image illisible'));
+    img.src = dataURL;
   });
 }
 
@@ -1109,7 +1178,24 @@ function closeOcrModal() {
 function setOcrState(state, data = {}) {
   const modal = $('#ocr-modal');
   if (!modal) return;
-  if (state === 'progress') {
+  if (state === 'crop') {
+    modal.innerHTML = `
+      <div class="modal-head">
+        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
+        <strong>Cadrez le titre</strong>
+        <button class="btn-link" id="crop-go">Analyser</button>
+      </div>
+      <div class="modal-body" style="padding:12px">
+        <p class="muted small">Déplacez et redimensionnez le cadre sur le <b>titre</b> du film, puis « Analyser ».</p>
+        <div id="crop-stage" style="position:relative;touch-action:none;user-select:none;margin-top:10px">
+          <img id="crop-img" src="${data.dataURL}" style="width:100%;display:block;border-radius:8px" />
+          <div id="crop-box" style="position:absolute;border:2px solid var(--accent);box-shadow:0 0 0 9999px rgba(0,0,0,.45);left:10%;top:35%;width:80%;height:18%;cursor:move"></div>
+        </div>
+        <button class="btn-ghost" id="crop-full" style="margin-top:12px">Analyser toute l'image</button>
+      </div>`;
+    setupCrop(data.dataURL);
+    $('#ocr-cancel').addEventListener('click', closeOcrModal);
+  } else if (state === 'progress') {
     modal.innerHTML = `
       <div class="modal-head">
         <span></span><strong>Lecture de la jaquette…</strong>
@@ -1169,6 +1255,67 @@ function setOcrState(state, data = {}) {
   }
   const cancel = $('#ocr-cancel');
   if (cancel) cancel.addEventListener('click', closeOcrModal);
+}
+
+/* Gère le cadre de recadrage (déplacement + redimensionnement tactile)
+   et les boutons « Analyser » (zone) / « Analyser toute l'image ». */
+function setupCrop(dataURL) {
+  const stage = $('#crop-stage'), box = $('#crop-box');
+  if (!stage || !box) return;
+
+  let mode = null, startX = 0, startY = 0, orig = {};
+  const rect = () => stage.getBoundingClientRect();
+  const pct = (px, total) => Math.max(0, Math.min(1, px / total));
+
+  // Zone de redimensionnement : coin bas-droit (20px). Sinon déplacement.
+  function pointerDown(e) {
+    const t = e.touches ? e.touches[0] : e;
+    const b = box.getBoundingClientRect();
+    startX = t.clientX; startY = t.clientY;
+    orig = { left: box.offsetLeft, top: box.offsetTop, w: box.offsetWidth, h: box.offsetHeight };
+    const nearCorner = (t.clientX > b.right - 28) && (t.clientY > b.bottom - 28);
+    mode = nearCorner ? 'resize' : 'move';
+    e.preventDefault();
+  }
+  function pointerMove(e) {
+    if (!mode) return;
+    const t = e.touches ? e.touches[0] : e;
+    const r = rect();
+    const dx = t.clientX - startX, dy = t.clientY - startY;
+    if (mode === 'move') {
+      box.style.left = Math.max(0, Math.min(r.width - box.offsetWidth, orig.left + dx)) + 'px';
+      box.style.top  = Math.max(0, Math.min(r.height - box.offsetHeight, orig.top + dy)) + 'px';
+    } else {
+      box.style.width  = Math.max(40, Math.min(r.width - box.offsetLeft, orig.w + dx)) + 'px';
+      box.style.height = Math.max(30, Math.min(r.height - box.offsetTop, orig.h + dy)) + 'px';
+    }
+    e.preventDefault();
+  }
+  function pointerUp() { mode = null; }
+
+  box.addEventListener('mousedown', pointerDown);
+  box.addEventListener('touchstart', pointerDown, { passive: false });
+  window.addEventListener('mousemove', pointerMove);
+  window.addEventListener('touchmove', pointerMove, { passive: false });
+  window.addEventListener('mouseup', pointerUp);
+  window.addEventListener('touchend', pointerUp);
+
+  // Analyser la zone recadrée
+  $('#crop-go').addEventListener('click', async () => {
+    const r = rect();
+    const cropPct = {
+      x: pct(box.offsetLeft, r.width),
+      y: pct(box.offsetTop, r.height),
+      w: pct(box.offsetWidth, r.width),
+      h: pct(box.offsetHeight, r.height),
+    };
+    try {
+      const cropped = await cropImage(dataURL, cropPct);
+      runOCR(cropped);
+    } catch (e) { toast('Erreur recadrage'); runOCR(dataURL); }
+  });
+  // Analyser toute l'image
+  $('#crop-full').addEventListener('click', () => runOCR(dataURL));
 }
 
 /* ---- Filtres (prompt simple, pas de lib) ---- */
