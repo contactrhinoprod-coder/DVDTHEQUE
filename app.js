@@ -1072,7 +1072,22 @@ async function runOCR(dataURL) {
   }
 }
 
-
+/* Recherche le titre choisi sur TMDB puis ouvre l'éditeur pré-rempli.
+   Rattache le code-barres scanné juste avant, le cas échéant. */
+async function ocrSearchTitle(title) {
+  closeOcrModal();
+  toast('Recherche TMDB : ' + title + '…');
+  const barcode = pendingBarcode;
+  pendingBarcode = '';
+  const film = await MovieAPI.searchByTitle(title);
+  if (film) {
+    toast('Film trouvé ✅');
+    openEditor({ ...film, barcode });
+  } else {
+    toast('Aucun résultat TMDB — complétez à la main');
+    openEditor({ ...MovieAPI.blankFromBarcode(barcode, title) });
+  }
+}
 
 /* --- Modale OCR (réutilise le backdrop d'édition) --- */
 function showOcrModal() {
