@@ -247,8 +247,9 @@ const FIREBASE_CONFIG = {
 
 const Cloud = (() => {
   let db = null, auth = null, uid = null, ready = false;
+  let currentUser = null;
+  let onChangeCb = null;
 
-  // Détecte si la config a bien été remplie (sinon on reste local)
   function configured() {
     return typeof firebase !== 'undefined'
       && FIREBASE_CONFIG.projectId
@@ -256,30 +257,45 @@ const Cloud = (() => {
   }
 
   function enabled() { return ready && !!uid; }
+  function user() { return currentUser; }
 
-  // Initialise Firebase + auth anonyme. Résout quand l'uid est prêt
-  // (fix race condition : on n'utilise jamais uid avant ce point).
-  async function init() {
+  // Initialise Firebase et écoute l'état de connexion.
+  // NE connecte PAS automatiquement : l'utilisateur clique "Se connecter".
+  // onChange(user|null) est rappelé à chaque changement d'état.
+  async function init(onChange) {
     if (!configured()) return false;
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     auth = firebase.auth();
     db   = firebase.firestore();
+    onChangeCb = onChange;
 
-    await auth.signInAnonymously();
-    await new Promise((res, rej) => {
-      const to = setTimeout(() => rej(new Error('Auth timeout')), 15000);
-      auth.onAuthStateChanged((user) => {
-        if (user) { uid = user.uid; ready = true; clearTimeout(to); res(); }
-      });
+    // Persistance locale : l'utilisateur reste connecté entre les sessions
+    try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
+
+    auth.onAuthStateChanged((u) => {
+      if (u) { currentUser = u; uid = u.uid; ready = true; }
+      else   { currentUser = null; uid = null; ready = false; }
+      if (onChangeCb) onChangeCb(currentUser);
     });
     return true;
+  }
+
+  // Connexion via Google (popup)
+  async function signInGoogle() {
+    if (!auth) return;
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+    // onAuthStateChanged se charge de la suite
+  }
+
+  async function signOut() {
+    if (auth) await auth.signOut();
   }
 
   function moviesCol() {
     return db.collection('users').doc(uid).collection('movies');
   }
 
-  // Limite Firestore = 1 Mo / document
   function docTooBig(movie) {
     return new Blob([JSON.stringify(movie)]).size > 1000 * 1024;
   }
@@ -313,7 +329,8 @@ const Cloud = (() => {
     }
   }
 
-  return { init, configured, enabled, pushMovie, deleteRemote, pullAll, pushAll, uid: () => uid };
+  return { init, configured, enabled, user, signInGoogle, signOut,
+           pushMovie, deleteRemote, pullAll, pushAll, uid: () => uid };
 })();
 
 /* ============================================================
@@ -987,6 +1004,25 @@ function spinRandom() {
 function renderProfile() {
   $('#profile-meta').textContent = `${State.movies.length} film${State.movies.length > 1 ? 's' : ''} dans la collection`;
   $('#set-theme').textContent = 'Thème : ' + (State.settings.theme === 'dark' ? 'Sombre' : 'Clair');
+
+  const u = Cloud.user && Cloud.user();
+  const nameEl = $('#profile-name'), avatarEl = $('#profile-avatar'), cloudBtn = $('#set-cloud');
+  if (u) {
+    nameEl.textContent = u.displayName || u.email || 'Connecté';
+    if (u.photoURL) {
+      avatarEl.style.backgroundImage = `url('${u.photoURL}')`;
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.style.backgroundImage = '';
+      avatarEl.textContent = (u.displayName || u.email || '?').charAt(0).toUpperCase();
+    }
+    if (cloudBtn) cloudBtn.textContent = 'Se déconnecter';
+  } else {
+    nameEl.textContent = 'Invité';
+    avatarEl.style.backgroundImage = '';
+    avatarEl.textContent = '?';
+    if (cloudBtn) cloudBtn.textContent = 'Se connecter avec Google';
+  }
 }
 
 /* ---- Éditeur de fiche (ajout/modif manuels) ---- */
@@ -1317,8 +1353,8 @@ function setOcrState(state, data = {}) {
       <div class="modal-body">
         <p class="muted small">Texte détecté sur la jaquette. Touchez le titre du film :</p>
         <div class="ocr-candidates">
-          ${data.candidates.map(c =>
-            `<button class="ocr-cand" data-t="${esc(c)}">${esc(c)}</button>`).join('')}
+          ${data.candidates.map((c, i) =>
+            `<button class="ocr-cand" data-i="${i}">${esc(c)}</button>`).join('')}
         </div>
         <div class="field" style="margin-top:16px">
           <label>Ou corrigez / saisissez le titre</label>
@@ -1327,7 +1363,7 @@ function setOcrState(state, data = {}) {
         <button class="btn-primary" id="ocr-search-btn">Rechercher ce film</button>
       </div>`;
     $$('.ocr-cand', modal).forEach(b =>
-      b.addEventListener('click', () => ocrSearchTitle(b.dataset.t)));
+      b.addEventListener('click', () => ocrSearchTitle(data.candidates[+b.dataset.i])));
     $('#ocr-search-btn').addEventListener('click', () => {
       const v = $('#ocr-edit-title').value.trim();
       if (v) ocrSearchTitle(v);
@@ -1484,7 +1520,6 @@ async function boot() {
   applyTheme();
 
   State.movies = await Store.allMovies();
-  if (!State.movies.length) await seedDemo();
 
   bindEvents();
   go('library');
@@ -1494,14 +1529,35 @@ async function boot() {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 
-  // Sync cloud : init automatique si FIREBASE_CONFIG est renseigné
+  // Init Firebase : écoute l'état de connexion Google.
+  // À chaque changement (connexion / déconnexion), on réagit.
   if (Cloud.configured()) {
     try {
-      await Cloud.init();
-      await syncCloud();      // fusion silencieuse au démarrage
-      renderLibrary();
+      await Cloud.init(onAuthChanged);
     } catch (e) { console.warn('Cloud init:', e); }
   }
+}
+
+/* Appelé à chaque changement d'état de connexion Google. */
+let _firstAuth = true;
+async function onAuthChanged(user) {
+  renderProfile();
+  if (user) {
+    // Connecté : on récupère la liste du compte et on fusionne
+    toast('Connecté : ' + (user.displayName || user.email || ''));
+    try {
+      await syncCloud();
+      renderLibrary();
+    } catch (e) { console.warn('sync après login:', e); }
+  } else if (!_firstAuth) {
+    // Déconnexion (pas au tout premier chargement) : on vide l'affichage
+    // local pour ne pas mélanger avec un autre compte.
+    State.movies = [];
+    await Store.clearMovies();
+    renderLibrary();
+    toast('Déconnecté');
+  }
+  _firstAuth = false;
 }
 
 /* Fusion locale <-> distante. Stratégie simple : union par id, le
@@ -1529,31 +1585,25 @@ async function syncCloud() {
   State.movies = await Store.allMovies();
 }
 
-/* Bouton « Sync cloud » du profil : affiche le statut et permet de
-   resynchroniser. La config est en dur dans FIREBASE_CONFIG (app.js). */
-async function configureCloud() {
+/* Connexion / déconnexion Google depuis le profil */
+async function cloudSignIn() {
   if (!Cloud.configured()) {
-    alert('Sync cloud non configurée.\n\nOuvre app.js et remplace les valeurs de FIREBASE_CONFIG par celles de ton projet Firebase (console → ⚙️ Paramètres → Vos applications → icône </>). Puis recharge la page.');
+    alert('Sync cloud non configurée (FIREBASE_CONFIG manquant dans app.js).');
     return;
   }
-  if (Cloud.enabled()) {
-    if (confirm('Sync cloud active ✅\n\nOK = resynchroniser maintenant.')) {
-      toast('Synchronisation…');
-      try { await syncCloud(); renderLibrary(); toast('Sync terminée'); }
-      catch (e) { toast('Erreur sync : ' + (e.message || '')); }
-    }
-    return;
-  }
-  // Configuré mais pas encore connecté (ex. échec auth) : on retente
-  toast('Connexion à Firebase…');
   try {
-    await Cloud.init();
-    await syncCloud();
-    renderLibrary();
-    toast('Sync cloud activée');
+    toast('Connexion Google…');
+    await Cloud.signInGoogle();
+    // onAuthChanged fait le reste (sync + affichage)
   } catch (e) {
     console.warn(e);
-    toast('Échec Firebase : ' + (e.message || '') + ' — vérifie Auth anonyme');
+    toast('Connexion annulée ou échouée');
+  }
+}
+
+async function cloudSignOut() {
+  if (confirm('Se déconnecter ? Ta liste reste sauvegardée dans ton compte Google.')) {
+    try { await Cloud.signOut(); } catch (e) { toast('Erreur déconnexion'); }
   }
 }
 
@@ -1585,7 +1635,6 @@ function bindEvents() {
   $('#sheet-backdrop').addEventListener('click', closeSheet);
   $('#act-cancel').addEventListener('click', closeSheet);
   $('#act-manual').addEventListener('click', () => { closeSheet(); openEditor({}); });
-  $('#act-scan').addEventListener('click', startScanFlow);
   $('#act-photo').addEventListener('click', startPhotoFlow);
   $('[data-action="add"]')?.addEventListener('click', openSheet);
 
@@ -1604,7 +1653,10 @@ function bindEvents() {
   $('#set-import').addEventListener('click', importJSON);
   $('#set-theme').addEventListener('click', toggleTheme);
   $('#set-api').addEventListener('click', configureAPI);
-  $('#set-cloud').addEventListener('click', configureCloud);
+  $('#set-cloud').addEventListener('click', () => {
+    if (Cloud.user && Cloud.user()) cloudSignOut();
+    else cloudSignIn();
+  });
   $('#set-wipe').addEventListener('click', async () => {
     if (!confirm('Vider toute la collection ? Action irréversible.')) return;
     await Store.clearMovies(); State.movies = []; toast('Collection vidée'); go('library');
