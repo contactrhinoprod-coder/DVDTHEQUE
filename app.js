@@ -2004,24 +2004,6 @@ const Quiz = (() => {
   }
   function shuffle(arr) { return sample(arr, arr.length); }
 
-  // Extrait les noms propres "intéressants" d'un synopsis (mots capitalisés
-  // qui ne sont pas en début de phrase), utiles pour des questions à trou.
-  function properNouns(text) {
-    if (!text) return [];
-    const words = text.split(/\s+/);
-    const out = [];
-    words.forEach((w, i) => {
-      const clean = w.replace(/[^A-Za-zÀ-ÿ'-]/g, '');
-      // capitalisé, longueur >= 3, pas en tout début, pas un mot courant
-      if (clean.length >= 3 && /^[A-ZÀ-Ý]/.test(clean) && i > 0) {
-        const prev = words[i - 1] || '';
-        const afterPunct = /[.!?]$/.test(prev);
-        if (!afterPunct) out.push(clean);
-      }
-    });
-    return [...new Set(out)];
-  }
-
   // Types de questions générables pour un film, selon ses données dispo
   function buildQuestion(film, all) {
     const types = [];
@@ -2032,7 +2014,6 @@ const Quiz = (() => {
     if (film.synopsis && film.synopsis.length > 40) {
       types.push('synopsis');        // deviner le film d'après le résumé
       types.push('synopsis-start');  // comment commence le résumé (1ère phrase)
-      if (properNouns(film.synopsis).length) types.push('synopsis-name'); // nom propre cité
     }
     if (film.poster) types.push('poster'); // affiche zoomée
     if (!types.length) return null;
@@ -2097,15 +2078,6 @@ const Quiz = (() => {
           .filter(m => m.synopsis && m.synopsis.length > 40)
           .map(m => (m.synopsis.split(/(?<=[.!?])\s/)[0] || m.synopsis).slice(0, 120) + '…');
         options = shuffle([answer, ...sample([...new Set(otherStarts)], 3)]);
-        break;
-      }
-      case 'synopsis-name': {
-        // Un nom propre cité dans le résumé -> dans quel film apparaît-il ?
-        const names = properNouns(film.synopsis);
-        const name = sample(names, 1)[0];
-        q = `Dans le résumé de quel film trouve-t-on « ${name} » ?`;
-        answer = film.title;
-        options = shuffle([answer, ...wrongFrom('title', answer)]);
         break;
       }
       case 'poster': {

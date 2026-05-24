@@ -4,7 +4,7 @@
    navigateur détecte un nouveau service worker, l'active, et
    recharge l'app automatiquement. Plus besoin de vider le cache. */
 
-const SW_VERSION = 'v25';
+const SW_VERSION = 'v26';
 
 self.addEventListener('install', () => {
   self.skipWaiting(); // active la nouvelle version sans attendre
