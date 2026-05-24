@@ -1143,23 +1143,16 @@ function renderPosterPreview(url) {
 
 /* ---- Partage ---- */
 async function shareMovie(m) {
-  // Texte : infos du film + commentaires écrits
-  const lines = [];
-  lines.push(`🎬 ${m.title}${m.year ? ' (' + m.year + ')' : ''}`);
-  if (m.director) lines.push(`Réalisateur : ${m.director}`);
-  if (m.genre)    lines.push(`Genre : ${m.genre}`);
-  if (m.format)   lines.push(`Format : ${m.format}`);
-  if (m.rating)   lines.push(`Note : ${'★'.repeat(m.rating)}${'☆'.repeat(5 - m.rating)}`);
-  if (m.synopsis) lines.push(`\n${m.synopsis}`);
-  const texts = (m.textComments || []).map(c => c.text).filter(Boolean);
-  if (texts.length) {
-    lines.push(`\n📝 Commentaires :`);
-    texts.forEach(t => lines.push(`• ${t}`));
-  }
-  const txt = lines.join('\n');
+  // Légende COURTE (infos clés uniquement) — c'est ce qui passe sur WhatsApp.
+  const parts = [];
+  parts.push(`🎬 ${m.title}${m.year ? ' (' + m.year + ')' : ''}`);
+  if (m.director) parts.push(`Réalisateur : ${m.director}`);
+  const gf = [m.genre, m.format].filter(Boolean).join(' · ');
+  if (gf) parts.push(gf);
+  if (m.rating) parts.push(`${'★'.repeat(m.rating)}${'☆'.repeat(5 - m.rating)}`);
+  const caption = parts.join('\n');
 
-  // On joint UNIQUEMENT l'affiche (compatible WhatsApp/Messenger).
-  // Pas d'audio : il faisait échouer le partage sur ces apps.
+  // Récupère l'affiche
   let posterFile = null;
   if (m.poster) {
     try {
@@ -1170,20 +1163,19 @@ async function shareMovie(m) {
     } catch (e) { /* affiche non récupérée */ }
   }
 
-  // 1) Tentative : texte + affiche
+  // 1) Affiche + légende courte (compatible WhatsApp/Messenger/Messages)
   if (posterFile && navigator.canShare && navigator.canShare({ files: [posterFile] })) {
     try {
-      await navigator.share({ title: m.title, text: txt, files: [posterFile] });
+      await navigator.share({ text: caption, files: [posterFile] });
       return;
     } catch (e) {
-      if (e.name === 'AbortError') return; // l'utilisateur a annulé
-      // sinon (app qui refuse les fichiers) -> on retombe sur texte seul
+      if (e.name === 'AbortError') return;
     }
   }
-  // 2) Repli : texte seul (+ lien de l'affiche s'il y en a une)
-  const txtWithLink = m.poster ? `${txt}\n\nAffiche : ${m.poster}` : txt;
+  // 2) Repli : texte seul (+ lien affiche)
+  const txtWithLink = m.poster ? `${caption}\n\n${m.poster}` : caption;
   if (navigator.share) {
-    try { await navigator.share({ title: m.title, text: txtWithLink }); return; }
+    try { await navigator.share({ text: txtWithLink }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
   // 3) Repli ultime : presse-papier
