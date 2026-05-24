@@ -713,13 +713,14 @@ function go(view, opts = {}) {
   $$('.view').forEach(v => (v.hidden = v.dataset.view !== view));
   $$('.tab[data-go]').forEach(t => t.classList.toggle('active', t.dataset.go === view));
 
-  const titles = { library: 'DVDthèque', random: 'Aléatoire', profile: 'Profil', detail: '' };
+  const titles = { library: 'DVDthèque', wishlist: 'Wishlist', random: 'Aléatoire', profile: 'Profil', detail: '' };
   $('#topbar-title').textContent = opts.title || titles[view] || '';
   $('#back-btn').hidden = view !== 'detail';
   $('#search-toggle').hidden = view !== 'library';
   if (view !== 'library') { $('#searchbar').hidden = true; }
 
   if (view === 'library') renderLibrary();
+  if (view === 'wishlist') renderWishlist();
   if (view === 'random') renderRandomView();
   if (view === 'profile') renderProfile();
   $('#views').scrollTop = 0;
@@ -727,7 +728,7 @@ function go(view, opts = {}) {
 
 /* ---- Filtre + tri appliqués à la collection ---- */
 function visibleMovies() {
-  let list = [...State.movies];
+  let list = State.movies.filter(m => !m.wishlist); // biblio = hors wishlist
   const f = State.filters, s = State.search.toLowerCase().trim();
 
   // Filtre maître par format (Tout / DVD / Blu-ray / 4K)
@@ -761,7 +762,7 @@ function visibleMovies() {
 function renderLibrary() {
   const grid = $('#library-grid');
   const list = visibleMovies();
-  $('#library-empty').hidden = State.movies.length !== 0;
+  $('#library-empty').hidden = list.length !== 0;
   grid.className = 'grid' + (State.layout === 'list' ? ' list' : '');
 
   grid.innerHTML = list.map(m => {
@@ -790,6 +791,28 @@ function renderLibrary() {
     c.addEventListener('click', () => openDetail(c.dataset.id)));
 
   renderActiveFilters();
+}
+
+/* Rendu de la wishlist (films souhaités, champ wishlist=true) */
+function renderWishlist() {
+  const grid = $('#wishlist-grid');
+  const list = State.movies.filter(m => m.wishlist);
+  $('#wishlist-empty').hidden = list.length !== 0;
+  grid.className = 'grid';
+  grid.innerHTML = list.map(m => {
+    const poster = m.poster
+      ? `style="background-image:url('${m.poster.replace(/'/g, "%27")}')"` : '';
+    const initial = (m.title || '?').charAt(0).toUpperCase();
+    return `<div class="card" data-id="${m.id}">
+      <div class="poster-wrap">
+        <div class="poster" ${poster}>${m.poster ? '' : initial}</div>
+        <span class="fmt-badge wish">♡ ${m.format || 'DVD'}</span>
+      </div>
+      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}</div></div>
+    </div>`;
+  }).join('');
+  $$('.card', grid).forEach(c =>
+    c.addEventListener('click', () => openDetail(c.dataset.id)));
 }
 
 function renderActiveFilters() {
@@ -865,6 +888,7 @@ function renderDetail(m) {
     </div>
 
     <div class="detail-actions">
+      ${m.wishlist ? `<button class="btn-primary" id="detail-found" style="grid-column:1/-1">✅ J'ai trouvé ce film → l'ajouter à ma collection</button>` : ''}
       <button class="btn-secondary" id="detail-edit">Modifier</button>
       <button class="btn-secondary" id="detail-share">Partager</button>
       <button class="btn-secondary" id="detail-delete" style="color:var(--accent)">Supprimer</button>
@@ -891,14 +915,24 @@ function renderDetail(m) {
     renderDetail(m);
   });
   // Actions
+  const foundBtn = $('#detail-found');
+  if (foundBtn) foundBtn.addEventListener('click', async () => {
+    m.wishlist = false;            // passe de la wishlist à la collection
+    m.addedAt = Date.now();        // daté comme un nouvel ajout
+    await Store.putMovie(m);
+    if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
+    toast('Ajouté à votre collection ✅');
+    go('library');
+  });
   $('#detail-edit').addEventListener('click', () => openEditor(m, true));
   $('#detail-share').addEventListener('click', () => shareMovie(m));
   $('#detail-delete').addEventListener('click', async () => {
-    if (!confirm('Supprimer ce film de la collection ?')) return;
+    const lieu = m.wishlist ? 'la wishlist' : 'la collection';
+    if (!confirm(`Supprimer ce film de ${lieu} ?`)) return;
     await Store.delMovie(m.id);
     if (Cloud.enabled()) Cloud.deleteRemote(m.id).catch(() => {});
     State.movies = State.movies.filter(x => x.id !== m.id);
-    toast('Film supprimé'); go('library');
+    toast('Film supprimé'); go(m.wishlist ? 'wishlist' : 'library');
   });
 }
 
@@ -981,6 +1015,7 @@ function spinRandom() {
   const genre = $('#random-genre').value;
   const minR = +$('#random-rating').value;
   let pool = State.movies.filter(m =>
+    !m.wishlist &&
     (!State.formatFilter || (m.format || 'DVD') === State.formatFilter) &&
     (!genre || m.genre === genre) && (m.rating || 0) >= minR);
   if (!pool.length) { toast('Aucun film ne correspond'); return; }
@@ -1042,6 +1077,10 @@ function openEditor(data, isEdit = false, onDone = null) {
   $('#edit-title-h').textContent = isEdit ? 'Modifier' : 'Nouveau film';
   $('#edit-form').innerHTML = `
     <button class="btn-primary" id="tmdb-fill" style="margin-bottom:16px">🔍 Remplir automatiquement depuis TMDB</button>
+    <div class="field"><label>Ajouter à</label><select id="f-dest">
+      <option value="library" ${!m.wishlist ? 'selected' : ''}>Ma collection</option>
+      <option value="wishlist" ${m.wishlist ? 'selected' : ''}>Wishlist (à trouver)</option>
+    </select></div>
     ${field('title', 'Titre', m.title)}
     ${field('originalTitle', 'Titre original', m.originalTitle)}
     <div class="field"><label>Format</label><select id="f-format">
@@ -1113,25 +1152,26 @@ function openEditor(data, isEdit = false, onDone = null) {
     m.poster        = $('#f-poster').value.trim();
     m.synopsis      = $('#f-synopsis').value.trim();
     m.barcode       = $('#f-barcode').value.trim();
+    m.wishlist      = $('#f-dest').value === 'wishlist'; // destination choisie
 
-    // Détection de doublon : UNIQUEMENT si même titre ET même format.
-    // (Même titre en format différent = légitime, on ajoute sans rien demander.)
+    // Détection de doublon : même titre + même format, DANS LA MÊME collection
+    // (biblio ou wishlist). Un film en wishlist n'est pas un doublon d'un film
+    // déjà possédé, et inversement.
     if (!isEdit) {
       const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
       const sameFormatDup = State.movies.some(x =>
+        !!x.wishlist === !!m.wishlist &&
         norm(x.title) === norm(m.title) && (x.format || 'DVD') === m.format);
       if (sameFormatDup) {
-        const ok = confirm(`« ${m.title} » est déjà dans votre collection en ${m.format}.\n\nVoulez-vous modifier le format (DVD / Blu-ray / 4K) ?\n\nOK = revenir changer le format\nAnnuler = ne pas ajouter`);
+        const lieu = m.wishlist ? 'votre wishlist' : 'votre collection';
+        const ok = confirm(`« ${m.title} » est déjà dans ${lieu} en ${m.format}.\n\nVoulez-vous modifier le format (DVD / Blu-ray / 4K) ?\n\nOK = revenir changer le format\nAnnuler = ne pas ajouter`);
         if (ok) {
-          // Retour au panneau : l'utilisateur change le format puis revalide.
-          // On ne ferme pas l'éditeur, on laisse la main sur le formulaire.
           toast('Changez le format puis validez');
           return;
         } else {
-          // On n'ajoute pas le doublon
           closeEditor();
           if (typeof onDone === 'function') { onDone(false); return; }
-          go('library');
+          go(m.wishlist ? 'wishlist' : 'library');
           return;
         }
       }
@@ -1141,9 +1181,9 @@ function openEditor(data, isEdit = false, onDone = null) {
     if (!isEdit) State.movies.push(m);
     if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
     closeEditor();
-    toast(isEdit ? 'Film modifié' : 'Film ajouté');
+    toast(isEdit ? 'Film modifié' : (m.wishlist ? 'Ajouté à la wishlist' : 'Film ajouté'));
     if (typeof onDone === 'function') { onDone(true); return; } // import : titre suivant
-    isEdit ? renderDetail(m) : go('library');
+    isEdit ? renderDetail(m) : go(m.wishlist ? 'wishlist' : 'library');
   };
   $('#edit-cancel').onclick = () => {
     closeEditor();
@@ -1729,9 +1769,12 @@ function imageToDataURL(url) {
 /* Exporte la collection visible (respecte le filtre actif) en PDF,
    sous forme de grille de vignettes : affiche + titre + réalisateur
    + année + genre + format. */
-async function exportPDF() {
-  const movies = visibleMovies();
-  if (!movies.length) { toast('Aucun film à exporter'); return; }
+async function exportPDF(mode = 'library') {
+  const isWish = mode === 'wishlist';
+  const movies = isWish
+    ? State.movies.filter(m => m.wishlist)
+    : visibleMovies();
+  if (!movies.length) { toast(isWish ? 'Wishlist vide' : 'Aucun film à exporter'); return; }
 
   toast('Génération du PDF…');
   try {
@@ -1753,15 +1796,18 @@ async function exportPDF() {
 
   // Titre du document
   pdf.setFontSize(18);
-  pdf.text('Ma DVDthèque', margin, margin + 4);
+  pdf.text(isWish ? 'Ma Wishlist' : 'Ma DVDthèque', margin, margin + 4);
   pdf.setFontSize(10);
   pdf.setTextColor(120);
-  // Portée : toute la collection ou filtre appliqué
-  const portee = State.formatFilter
-    ? `Format : ${State.formatFilter}`
-    : 'Collection complète';
-  const genreFiltre = State.filters.genre ? ` · Genre : ${State.filters.genre}` : '';
-  pdf.text(`${portee}${genreFiltre} — ${movies.length} film(s)`, margin, margin + 10);
+  // Portée
+  let portee;
+  if (isWish) {
+    portee = 'Films recherchés';
+  } else {
+    portee = State.formatFilter ? `Format : ${State.formatFilter}` : 'Collection complète';
+    if (State.filters.genre) portee += ` · Genre : ${State.filters.genre}`;
+  }
+  pdf.text(`${portee} — ${movies.length} film(s)`, margin, margin + 10);
   // Date de création du PDF
   const dateStr = new Date().toLocaleDateString('fr-FR', {
     day: '2-digit', month: 'long', year: 'numeric',
@@ -1811,12 +1857,12 @@ async function exportPDF() {
     }
   }
 
-  const fname = `ma-dvdtheque-${new Date().toISOString().slice(0,10)}.pdf`;
+  const fname = `${isWish ? 'wishlist' : 'ma-dvdtheque'}-${new Date().toISOString().slice(0,10)}.pdf`;
   // Sur mobile, ouvrir le partage natif si possible, sinon télécharger
   const blob = pdf.output('blob');
   const file = new File([blob], fname, { type: 'application/pdf' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Ma DVDthèque' }); return; }
+    try { await navigator.share({ files: [file], title: isWish ? 'Ma Wishlist' : 'Ma DVDthèque' }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
   // Repli : téléchargement
@@ -2016,7 +2062,10 @@ function bindEvents() {
   $('#add-tab').addEventListener('click', openSheet);
 
   // Topbar
-  $('#back-btn').addEventListener('click', () => go('library'));
+  $('#back-btn').addEventListener('click', () => {
+    const m = State.movies.find(x => x.id === State.currentId);
+    go(m && m.wishlist ? 'wishlist' : 'library');
+  });
   $('#search-toggle').addEventListener('click', () => {
     const sb = $('#searchbar'); sb.hidden = !sb.hidden;
     if (!sb.hidden) $('#search-input').focus();
@@ -2058,7 +2107,8 @@ function bindEvents() {
   $('#random-open').addEventListener('click', () => randomPick && openDetail(randomPick.id));
 
   // Profile
-  $('#set-pdf').addEventListener('click', exportPDF);
+  $('#set-pdf').addEventListener('click', () => exportPDF('library'));
+  $('#set-pdf-wish').addEventListener('click', () => exportPDF('wishlist'));
   $('#set-theme').addEventListener('click', toggleTheme);
   $('#set-cloud').addEventListener('click', () => {
     if (Cloud.user && Cloud.user()) cloudSignOut();

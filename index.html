@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>DVDthèque — Ma Collection</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./style.css?v=16" />
+  <link rel="stylesheet" href="./style.css?v=18" />
 </head>
 <body>
   <!-- ====================== ÉCRAN DE CONNEXION ====================== -->
@@ -77,6 +77,16 @@
         </div>
       </section>
 
+      <!-- ---------- VUE : Wishlist ---------- -->
+      <section class="view" data-view="wishlist" hidden>
+        <div id="wishlist-grid" class="grid"></div>
+        <div id="wishlist-empty" class="empty-state" hidden>
+          <div class="empty-icon">♡</div>
+          <p>Votre wishlist est vide.</p>
+          <p class="muted small">Ajoutez les films que vous cherchez via le bouton ＋ en choisissant « Wishlist ».</p>
+        </div>
+      </section>
+
       <!-- ---------- VUE : Détail film ---------- -->
       <section class="view" data-view="detail" hidden>
         <div id="detail-content"><!-- injecté --></div>
@@ -113,6 +123,7 @@
           </div>
           <div class="settings-list">
             <button class="settings-row" id="set-pdf">Exporter ma collection en PDF</button>
+            <button class="settings-row" id="set-pdf-wish">Exporter ma wishlist en PDF</button>
             <button class="settings-row" id="set-theme">Thème : Sombre</button>
             <button class="settings-row" id="set-cloud">Sync cloud (Firebase)</button>
             <button class="settings-row danger" id="set-wipe">Vider la collection</button>
@@ -126,8 +137,9 @@
     <!-- Barre de navigation du bas -->
     <nav id="tabbar">
       <button class="tab active" data-go="library"><span>▦</span>Biblio</button>
-      <button class="tab" data-go="random"><span>🎲</span>Aléatoire</button>
+      <button class="tab" data-go="wishlist"><span>♡</span>Wishlist</button>
       <button class="tab" id="add-tab"><span class="add-plus">＋</span></button>
+      <button class="tab" data-go="random"><span>🎲</span>Aléatoire</button>
       <button class="tab" data-go="profile"><span>☰</span>Profil</button>
     </nav>
 
@@ -170,6 +182,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="./app.js?v=16"></script>
+  <script src="./app.js?v=18"></script>
 </body>
 </html>
