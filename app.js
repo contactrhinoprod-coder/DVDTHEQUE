@@ -24,6 +24,7 @@ const State = {
   view: 'library',
   layout: 'grid',
   sort: 'title',
+  formatFilter: '',    // '' = tout, sinon 'DVD' | 'Blu-ray' | '4K'
   filters: {},         // {genre, year, format, rating}
   search: '',
   currentId: null,     // film ouvert en détail
@@ -729,6 +730,9 @@ function visibleMovies() {
   let list = [...State.movies];
   const f = State.filters, s = State.search.toLowerCase().trim();
 
+  // Filtre maître par format (Tout / DVD / Blu-ray / 4K)
+  if (State.formatFilter) list = list.filter(m => (m.format || 'DVD') === State.formatFilter);
+
   if (s) list = list.filter(m =>
     (m.title || '').toLowerCase().includes(s) ||
     (m.director || '').toLowerCase().includes(s) ||
@@ -976,7 +980,9 @@ let randomPick = null;
 function spinRandom() {
   const genre = $('#random-genre').value;
   const minR = +$('#random-rating').value;
-  let pool = State.movies.filter(m => (!genre || m.genre === genre) && (m.rating || 0) >= minR);
+  let pool = State.movies.filter(m =>
+    (!State.formatFilter || (m.format || 'DVD') === State.formatFilter) &&
+    (!genre || m.genre === genre) && (m.rating || 0) >= minR);
   if (!pool.length) { toast('Aucun film ne correspond'); return; }
 
   const reel = $('#random-reel');
@@ -1800,6 +1806,11 @@ function bindEvents() {
   $$('#layout-seg button').forEach(b => b.addEventListener('click', () => {
     State.layout = b.dataset.layout;
     $$('#layout-seg button').forEach(x => x.classList.toggle('active', x === b));
+    renderLibrary();
+  }));
+  $$('#format-seg button').forEach(b => b.addEventListener('click', () => {
+    State.formatFilter = b.dataset.fmt;
+    $$('#format-seg button').forEach(x => x.classList.toggle('active', x === b));
     renderLibrary();
   }));
   $('#sort-select').addEventListener('change', (e) => { State.sort = e.target.value; renderLibrary(); });

@@ -412,3 +412,18 @@ html, body {
   color: #fff; font-weight: 700; font-size: .9rem;
 }
 .login-error { color: var(--accent); font-size: .85rem; margin-top: 16px; }
+
+/* ====================== SÉLECTEUR DE FORMAT (Tout/DVD/Blu-ray/4K) ====================== */
+.format-seg {
+  display: flex; gap: 6px; padding: 10px 12px 0; 
+}
+.format-seg button {
+  flex: 1; padding: 9px 4px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-dim); font-size: .9rem; font-weight: 600; cursor: pointer;
+  transition: all .15s;
+}
+.format-seg button.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.format-seg button:active { opacity: .8; }
