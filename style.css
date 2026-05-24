@@ -385,3 +385,30 @@ html, body {
   .grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
   .detail-poster { width: 150px; }
 }
+
+/* ====================== ÉCRAN DE CONNEXION ====================== */
+#login-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.login-box {
+  max-width: 360px; width: 100%; text-align: center;
+}
+.login-logo { font-size: 4rem; margin-bottom: 8px; }
+.login-box h1 { font-size: 1.8rem; margin: 0 0 12px; }
+.login-sub { color: var(--text-dim); font-size: .95rem; line-height: 1.5; margin-bottom: 28px; }
+.login-google {
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+  width: 100%; padding: 14px 20px; border-radius: 12px; border: none;
+  background: #fff; color: #1f1f1f; font-size: 1rem; font-weight: 600; cursor: pointer;
+}
+.login-google:active { opacity: .85; }
+.g-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: conic-gradient(from -45deg, #ea4335 0deg 90deg, #fbbc05 90deg 180deg, #34a853 180deg 270deg, #4285f4 270deg 360deg);
+  color: #fff; font-weight: 700; font-size: .9rem;
+}
+.login-error { color: var(--accent); font-size: .85rem; margin-top: 16px; }

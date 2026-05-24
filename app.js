@@ -1358,12 +1358,17 @@ function setOcrState(state, data = {}) {
         </div>
         <div class="field" style="margin-top:16px">
           <label>Ou corrigez / saisissez le titre</label>
-          <input id="ocr-edit-title" type="text" placeholder="Titre du film" />
+          <input id="ocr-edit-title" type="text" placeholder="Titre du film" value="${esc(data.candidates[0] || '')}" />
         </div>
         <button class="btn-primary" id="ocr-search-btn">Rechercher ce film</button>
       </div>`;
     $$('.ocr-cand', modal).forEach(b =>
-      b.addEventListener('click', () => ocrSearchTitle(data.candidates[+b.dataset.i])));
+      b.addEventListener('click', () => {
+        // Clic sur un candidat : on remplit le champ ET on lance la recherche
+        const t = data.candidates[+b.dataset.i];
+        const input = $('#ocr-edit-title'); if (input) input.value = t;
+        ocrSearchTitle(t);
+      }));
     $('#ocr-search-btn').addEventListener('click', () => {
       const v = $('#ocr-edit-title').value.trim();
       if (v) ocrSearchTitle(v);
@@ -1519,43 +1524,77 @@ async function boot() {
   if (saved) State.settings = { ...State.settings, ...saved };
   applyTheme();
 
-  State.movies = await Store.allMovies();
-
   bindEvents();
-  go('library');
+  bindLogin();
 
   // Service worker (offline)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 
-  // Init Firebase : écoute l'état de connexion Google.
-  // À chaque changement (connexion / déconnexion), on réagit.
   if (Cloud.configured()) {
+    // Mode connecté : on affiche l'écran de login tant que Firebase
+    // n'a pas confirmé une session. onAuthChanged gère l'affichage.
+    showLogin(true);
     try {
       await Cloud.init(onAuthChanged);
-    } catch (e) { console.warn('Cloud init:', e); }
+    } catch (e) {
+      console.warn('Cloud init:', e);
+      // En cas d'échec d'init, on bascule en mode local pour ne pas bloquer
+      showLogin(false);
+      State.movies = await Store.allMovies();
+      go('library');
+    }
+  } else {
+    // Pas de config Firebase : mode 100% local, pas de mur de connexion
+    showLogin(false);
+    State.movies = await Store.allMovies();
+    go('library');
   }
+}
+
+/* Affiche / masque l'écran de connexion plein écran */
+function showLogin(show) {
+  const screen = $('#login-screen'), app = $('#app');
+  if (screen) screen.hidden = !show;
+  if (app) app.style.display = show ? 'none' : '';
+}
+
+function bindLogin() {
+  const btn = $('#login-google-btn');
+  if (btn) btn.addEventListener('click', async () => {
+    const err = $('#login-error');
+    if (err) err.hidden = true;
+    try {
+      await Cloud.signInGoogle();
+      // onAuthChanged prend le relais
+    } catch (e) {
+      console.warn(e);
+      if (err) { err.textContent = 'Connexion échouée. Réessayez.'; err.hidden = false; }
+    }
+  });
 }
 
 /* Appelé à chaque changement d'état de connexion Google. */
 let _firstAuth = true;
 async function onAuthChanged(user) {
-  renderProfile();
   if (user) {
-    // Connecté : on récupère la liste du compte et on fusionne
-    toast('Connecté : ' + (user.displayName || user.email || ''));
+    // Connecté : on masque le login, on charge la liste du compte
+    showLogin(false);
+    State.movies = await Store.allMovies();
+    go('library');
+    renderProfile();
     try {
       await syncCloud();
       renderLibrary();
     } catch (e) { console.warn('sync après login:', e); }
-  } else if (!_firstAuth) {
-    // Déconnexion (pas au tout premier chargement) : on vide l'affichage
-    // local pour ne pas mélanger avec un autre compte.
-    State.movies = [];
-    await Store.clearMovies();
-    renderLibrary();
-    toast('Déconnecté');
+  } else {
+    // Pas (ou plus) connecté : on vide l'affichage local et on montre le login
+    if (!_firstAuth) {
+      State.movies = [];
+      await Store.clearMovies();
+    }
+    showLogin(true);
   }
   _firstAuth = false;
 }
