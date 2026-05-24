@@ -186,6 +186,32 @@ const MovieAPI = (() => {
     } catch (e) { console.warn('API film:', e); return null; }
   }
 
+  /* Renvoie une LISTE de résultats TMDB (pour laisser l'utilisateur choisir
+     entre "Casino" 1995 et "Casino Royale", par ex.). */
+  async function searchMulti(title) {
+    const { apiKey } = State.settings;
+    if (!apiKey) return [];
+    try {
+      const url = `https://api.themoviedb.org/3/search/movie?language=fr-FR&query=${encodeURIComponent(title)}&api_key=${apiKey}`;
+      const r = await fetch(url);
+      if (!r.ok) return [];
+      const j = await r.json();
+      return (j.results || []).slice(0, 8).map(m => ({
+        id: m.id,
+        title: m.title || '',
+        year: (m.release_date || '').slice(0, 4),
+        poster: m.poster_path ? `https://image.tmdb.org/t/p/w185${m.poster_path}` : '',
+      }));
+    } catch (e) { console.warn('searchMulti:', e); return []; }
+  }
+
+  // Détails complets d'un film à partir de son id TMDB
+  async function getDetails(id) {
+    const { apiKey } = State.settings;
+    try { return await tmdbDetails(id, apiKey); }
+    catch (e) { console.warn('getDetails:', e); return null; }
+  }
+
   function blankFromBarcode(ean, guessTitle) {
     return {
       title: guessTitle || '', originalTitle: '', year: '', synopsis: '',
@@ -193,7 +219,7 @@ const MovieAPI = (() => {
     };
   }
 
-  return { searchByBarcode, searchByTitle, blankFromBarcode };
+  return { searchByBarcode, searchByTitle, searchMulti, getDetails, blankFromBarcode };
 })();
 
 /* ============================================================
@@ -1174,20 +1200,38 @@ async function runOCR(dataURL) {
   }
 }
 
-/* Recherche le titre choisi sur TMDB puis ouvre l'éditeur pré-rempli.
-   Rattache le code-barres scanné juste avant, le cas échéant. */
+/* Cherche le titre sur TMDB. Si plusieurs résultats, on les affiche
+   pour que l'utilisateur choisisse le bon (ex: Casino vs Casino Royale). */
 async function ocrSearchTitle(title) {
-  closeOcrModal();
   toast('Recherche TMDB : ' + title + '…');
-  const barcode = pendingBarcode;
-  pendingBarcode = '';
-  const film = await MovieAPI.searchByTitle(title);
+  const results = await MovieAPI.searchMulti(title);
+  if (!results.length) {
+    closeOcrModal();
+    const barcode = pendingBarcode; pendingBarcode = '';
+    toast('Aucun résultat TMDB — complétez à la main');
+    openEditor({ ...MovieAPI.blankFromBarcode(barcode, title) });
+    return;
+  }
+  // Un seul résultat : on prend direct. Plusieurs : on laisse choisir.
+  if (results.length === 1) {
+    pickTmdbResult(results[0].id);
+  } else {
+    setOcrState('results', { results });
+  }
+}
+
+/* L'utilisateur a choisi un film précis dans la liste TMDB */
+async function pickTmdbResult(id) {
+  closeOcrModal();
+  toast('Chargement de la fiche…');
+  const barcode = pendingBarcode; pendingBarcode = '';
+  const film = await MovieAPI.getDetails(id);
   if (film) {
     toast('Film trouvé ✅');
     openEditor({ ...film, barcode });
   } else {
-    toast('Aucun résultat TMDB — complétez à la main');
-    openEditor({ ...MovieAPI.blankFromBarcode(barcode, title) });
+    toast('Erreur — saisie manuelle');
+    openEditor({ ...MovieAPI.blankFromBarcode(barcode, '') });
   }
 }
 
@@ -1240,6 +1284,29 @@ function setOcrState(state, data = {}) {
         <div class="ocr-bar"><div class="ocr-bar-fill" style="width:${data.pct||0}%"></div></div>
         <p class="muted small" style="margin-top:20px">Le moteur OCR (~2 Mo) se charge au premier usage.</p>
       </div>`;
+  } else if (state === 'results') {
+    modal.innerHTML = `
+      <div class="modal-head">
+        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
+        <strong>Quel film ?</strong>
+        <button class="btn-link" id="ocr-manual2">Manuel</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">Plusieurs films correspondent. Touchez le bon :</p>
+        <div class="tmdb-results">
+          ${data.results.map(r => `
+            <button class="tmdb-result" data-id="${r.id}">
+              <div class="tmdb-poster" style="${r.poster ? `background-image:url('${r.poster}')` : ''}">${r.poster ? '' : '🎬'}</div>
+              <div class="tmdb-info">
+                <div class="tmdb-title">${esc(r.title)}</div>
+                <div class="tmdb-year">${r.year || '—'}</div>
+              </div>
+            </button>`).join('')}
+        </div>
+      </div>`;
+    $$('.tmdb-result', modal).forEach(b =>
+      b.addEventListener('click', () => pickTmdbResult(Number(b.dataset.id))));
+    $('#ocr-manual2').addEventListener('click', () => { closeOcrModal(); openEditor({}); });
   } else if (state === 'choose') {
     modal.innerHTML = `
       <div class="modal-head">

@@ -362,6 +362,23 @@ html, body {
 }
 .ocr-cand:active { background: var(--surface-2); border-color: var(--accent); }
 
+/* Liste de résultats TMDB (choix du film) */
+.tmdb-results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.tmdb-result {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px; color: var(--text); cursor: pointer;
+}
+.tmdb-result:active { background: var(--surface-2); border-color: var(--accent); }
+.tmdb-poster {
+  width: 46px; height: 69px; flex: none; border-radius: 6px;
+  background: var(--surface-2) center/cover no-repeat;
+  display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+}
+.tmdb-info { flex: 1; }
+.tmdb-title { font-weight: 600; font-size: .95rem; }
+.tmdb-year { font-size: .8rem; color: var(--text-dim); margin-top: 2px; }
+
 /* ---------------- Tablet ---------------- */
 @media (min-width: 768px) {
   #app { max-width: 900px; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
