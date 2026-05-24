@@ -1143,13 +1143,65 @@ function renderPosterPreview(url) {
 
 /* ---- Partage ---- */
 async function shareMovie(m) {
-  const txt = `🎬 ${m.title} (${m.year})\n${m.genre} · ${m.format}\nNote : ${'★'.repeat(m.rating||0)}\n${m.synopsis || ''}`;
-  if (navigator.share) {
-    try { await navigator.share({ title: m.title, text: txt }); } catch (e) {}
-  } else {
-    await navigator.clipboard?.writeText(txt);
-    toast('Copié dans le presse-papier');
+  // Texte complet
+  const lines = [];
+  lines.push(`🎬 ${m.title}${m.year ? ' (' + m.year + ')' : ''}`);
+  if (m.director) lines.push(`Réalisateur : ${m.director}`);
+  if (m.genre)    lines.push(`Genre : ${m.genre}`);
+  if (m.format)   lines.push(`Format : ${m.format}`);
+  if (m.rating)   lines.push(`Note : ${'★'.repeat(m.rating)}${'☆'.repeat(5 - m.rating)}`);
+  if (m.synopsis) lines.push(`\n${m.synopsis}`);
+  // Commentaires écrits
+  const texts = (m.textComments || []).map(c => c.text).filter(Boolean);
+  if (texts.length) {
+    lines.push(`\n📝 Commentaires :`);
+    texts.forEach(t => lines.push(`• ${t}`));
   }
+  const audioCount = (m.audio || []).length;
+  if (audioCount) lines.push(`\n🎙️ ${audioCount} commentaire(s) audio joint(s)`);
+  const txt = lines.join('\n');
+
+  // Prépare les fichiers à joindre (affiche + audio)
+  const files = [];
+  // Affiche
+  if (m.poster) {
+    try {
+      const resp = await fetch(m.poster);
+      const blob = await resp.blob();
+      const ext = (blob.type.split('/')[1] || 'jpg').split('+')[0];
+      files.push(new File([blob], `${m.title}.${ext}`, { type: blob.type }));
+    } catch (e) { /* affiche non jointe, on garde le lien dans le texte */ }
+  }
+  // Audio (base64 dataURL -> File)
+  for (let i = 0; i < (m.audio || []).length; i++) {
+    try {
+      const a = m.audio[i];
+      const resp = await fetch(a.data); // dataURL
+      const blob = await resp.blob();
+      const ext = (blob.type.split('/')[1] || 'webm').split(';')[0];
+      files.push(new File([blob], `${m.title}-commentaire${i + 1}.${ext}`, { type: blob.type }));
+    } catch (e) { /* cet audio ne sera pas joint */ }
+  }
+
+  const shareText = m.poster && !files.some(f => f.type.startsWith('image'))
+    ? txt + `\n\nAffiche : ${m.poster}`   // si l'affiche n'a pas pu être jointe, on met le lien
+    : txt;
+
+  // Partage natif avec fichiers si supporté
+  if (navigator.canShare && files.length && navigator.canShare({ files })) {
+    try {
+      await navigator.share({ title: m.title, text: shareText, files });
+      return;
+    } catch (e) { if (e.name === 'AbortError') return; /* sinon on tente sans fichiers */ }
+  }
+  // Partage natif texte seul
+  if (navigator.share) {
+    try { await navigator.share({ title: m.title, text: shareText }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  // Repli : presse-papier
+  await navigator.clipboard?.writeText(shareText);
+  toast('Copié dans le presse-papier');
 }
 
 /* ---- Add sheet ---- */
@@ -1635,6 +1687,126 @@ async function exportJSON() {
   a.href = url; a.download = `dvdtheque-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); URL.revokeObjectURL(url);
 }
+
+/* Charge jsPDF à la demande (CDN) */
+function loadJsPDF() {
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+    s.onload = res;
+    s.onerror = () => rej(new Error('Chargement jsPDF impossible (réseau ?)'));
+    document.head.appendChild(s);
+  });
+}
+
+/* Télécharge une image et la convertit en dataURL (pour l'intégrer au PDF).
+   Renvoie null si échec (affiche manquante / réseau). */
+function imageToDataURL(url) {
+  return new Promise((res) => {
+    if (!url) return res(null);
+    fetch(url)
+      .then(r => r.blob())
+      .then(blob => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = () => res(null);
+        r.readAsDataURL(blob);
+      })
+      .catch(() => res(null));
+  });
+}
+
+/* Exporte la collection visible (respecte le filtre actif) en PDF,
+   sous forme de grille de vignettes : affiche + titre + réalisateur
+   + année + genre + format. */
+async function exportPDF() {
+  const movies = visibleMovies();
+  if (!movies.length) { toast('Aucun film à exporter'); return; }
+
+  toast('Génération du PDF…');
+  try {
+    await loadJsPDF();
+  } catch (e) { toast(e.message); return; }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageW = 210, pageH = 297;
+  const margin = 12;
+  const cols = 3;
+  const gap = 8;
+  const cellW = (pageW - margin * 2 - gap * (cols - 1)) / cols; // largeur d'une vignette
+  const posterH = cellW * 1.4;      // ratio affiche ~ 1:1.4
+  const textH = 20;                 // hauteur réservée au texte sous l'affiche
+  const cellH = posterH + textH;
+  const rowsPerPage = Math.floor((pageH - margin * 2 - 14) / (cellH + gap));
+
+  // Titre du document
+  pdf.setFontSize(18);
+  pdf.text('Ma DVDthèque', margin, margin + 4);
+  pdf.setFontSize(10);
+  pdf.setTextColor(120);
+  const sub = (State.formatFilter ? State.formatFilter + ' · ' : '') + movies.length + ' film(s)';
+  pdf.text(sub, margin, margin + 10);
+  pdf.setTextColor(0);
+
+  let col = 0, row = 0;
+  const startY = margin + 14;
+
+  for (let i = 0; i < movies.length; i++) {
+    const m = movies[i];
+    const x = margin + col * (cellW + gap);
+    const y = startY + row * (cellH + gap);
+
+    // Affiche (ou cadre avec initiale si absente)
+    const img = await imageToDataURL(m.poster);
+    if (img) {
+      try { pdf.addImage(img, 'JPEG', x, y, cellW, posterH); }
+      catch (e) {
+        pdf.setDrawColor(200); pdf.rect(x, y, cellW, posterH);
+      }
+    } else {
+      pdf.setFillColor(235); pdf.rect(x, y, cellW, posterH, 'F');
+      pdf.setFontSize(22); pdf.setTextColor(150);
+      pdf.text((m.title || '?').charAt(0).toUpperCase(), x + cellW / 2, y + posterH / 2, { align: 'center', baseline: 'middle' });
+      pdf.setTextColor(0);
+    }
+
+    // Texte sous l'affiche
+    let ty = y + posterH + 4;
+    pdf.setFontSize(8.5); pdf.setTextColor(0);
+    const title = pdf.splitTextToSize(m.title || 'Sans titre', cellW);
+    pdf.text(title.slice(0, 2), x, ty); // max 2 lignes de titre
+    ty += title.length > 1 ? 7 : 4;
+    pdf.setFontSize(7); pdf.setTextColor(90);
+    const meta = [m.director, m.year, m.genre, m.format].filter(Boolean).join(' · ');
+    const metaLines = pdf.splitTextToSize(meta, cellW);
+    pdf.text(metaLines.slice(0, 2), x, ty);
+    pdf.setTextColor(0);
+
+    // Avance dans la grille
+    col++;
+    if (col >= cols) { col = 0; row++; }
+    if (row >= rowsPerPage && i < movies.length - 1) {
+      pdf.addPage(); row = 0; col = 0;
+    }
+  }
+
+  const fname = `ma-dvdtheque-${new Date().toISOString().slice(0,10)}.pdf`;
+  // Sur mobile, ouvrir le partage natif si possible, sinon télécharger
+  const blob = pdf.output('blob');
+  const file = new File([blob], fname, { type: 'application/pdf' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Ma DVDthèque' }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  // Repli : téléchargement
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fname; a.click();
+  URL.revokeObjectURL(url);
+  toast('PDF généré ✅');
+}
 function importJSON() {
   const input = document.createElement('input');
   input.type = 'file'; input.accept = 'application/json';
@@ -1868,6 +2040,7 @@ function bindEvents() {
 
   // Profile
   $('#set-export').addEventListener('click', exportJSON);
+  $('#set-pdf').addEventListener('click', exportPDF);
   $('#set-import').addEventListener('click', importJSON);
   $('#set-theme').addEventListener('click', toggleTheme);
   $('#set-api').addEventListener('click', configureAPI);
