@@ -1113,6 +1113,30 @@ function openEditor(data, isEdit = false, onDone = null) {
     m.poster        = $('#f-poster').value.trim();
     m.synopsis      = $('#f-synopsis').value.trim();
     m.barcode       = $('#f-barcode').value.trim();
+
+    // Détection de doublon (uniquement pour un nouvel ajout)
+    if (!isEdit) {
+      const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      const dups = State.movies.filter(x => norm(x.title) === norm(m.title));
+      if (dups.length) {
+        const sameFormat = dups.some(x => (x.format || 'DVD') === m.format);
+        const formatsExistants = [...new Set(dups.map(x => x.format || 'DVD'))].join(', ');
+        let msg;
+        if (sameFormat) {
+          msg = `« ${m.title} » est déjà dans votre collection en ${m.format}.\n\nVoulez-vous quand même l'ajouter une seconde fois ?`;
+        } else {
+          msg = `« ${m.title} » est déjà dans votre collection (${formatsExistants}).\n\nVous l'ajoutez ici en ${m.format} — ce n'est pas le même format, c'est peut-être normal (ex : vous avez le DVD ET le Blu-ray).\n\nGarder les deux ?`;
+        }
+        if (!confirm(msg)) {
+          // L'utilisateur ne veut pas du doublon : on annule l'ajout
+          closeEditor();
+          if (typeof onDone === 'function') { onDone(false); return; }
+          go('library');
+          return;
+        }
+      }
+    }
+
     await Store.putMovie(m);
     if (!isEdit) State.movies.push(m);
     if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
@@ -1159,7 +1183,6 @@ async function shareMovie(m) {
   const txt = lines.join('\n');
 
   // On joint UNIQUEMENT l'affiche (compatible WhatsApp/Messenger).
-  // Pas d'audio : il faisait échouer le partage sur ces apps.
   let posterFile = null;
   if (m.poster) {
     try {
@@ -1176,11 +1199,10 @@ async function shareMovie(m) {
       await navigator.share({ title: m.title, text: txt, files: [posterFile] });
       return;
     } catch (e) {
-      if (e.name === 'AbortError') return; // l'utilisateur a annulé
-      // sinon (app qui refuse les fichiers) -> on retombe sur texte seul
+      if (e.name === 'AbortError') return;
     }
   }
-  // 2) Repli : texte seul (+ lien de l'affiche s'il y en a une)
+  // 2) Repli : texte seul (+ lien de l'affiche)
   const txtWithLink = m.poster ? `${txt}\n\nAffiche : ${m.poster}` : txt;
   if (navigator.share) {
     try { await navigator.share({ title: m.title, text: txtWithLink }); return; }
