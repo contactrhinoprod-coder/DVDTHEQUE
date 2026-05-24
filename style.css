@@ -1,6 +1,6 @@
 /* ============================================================
-   DVDthÃ¨que â€” style.css
-   ThÃ¨me cinÃ©ma sobre. Variables CSS pour dark/light.
+   DVDthèque — style.css
+   Thème cinéma sobre. Variables CSS pour dark/light.
    ============================================================ */
 
 :root {
@@ -10,7 +10,7 @@
   --surface-2: #2c343c;
   --text:      #eef2f5;
   --text-dim:  #9aa7b2;
-  --accent:    #e50914;       /* rouge cinÃ©ma */
+  --accent:    #e50914;       /* rouge cinéma */
   --accent-dim:#b00710;
   --border:    #313a43;
   --star:      #f5c518;
@@ -34,9 +34,9 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-/* FIX CRITIQUE : sans cette rÃ¨gle, les Ã©lÃ©ments .modal/.sheet/.backdrop
-   qui ont un display: explicite s'affichent malgrÃ© l'attribut hidden,
-   ce qui ouvrait l'Ã©diteur par-dessus l'app au dÃ©marrage. */
+/* FIX CRITIQUE : sans cette règle, les éléments .modal/.sheet/.backdrop
+   qui ont un display: explicite s'affichent malgré l'attribut hidden,
+   ce qui ouvrait l'éditeur par-dessus l'app au démarrage. */
 [hidden] { display: none !important; }
 
 html, body {

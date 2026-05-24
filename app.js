@@ -889,6 +889,67 @@ function openEditor(data, isEdit = false) {
     audio: [], textComments: [], ...data,
   };
 
+  $('#edit-title-h').textContent = isEdit ? 'Modifier' : 'Nouveau film';
+  $('#edit-form').innerHTML = `
+    <button class="btn-primary" id="tmdb-fill" style="margin-bottom:16px">🔍 Remplir automatiquement depuis TMDB</button>
+    ${field('title', 'Titre', m.title)}
+    ${field('originalTitle', 'Titre original', m.originalTitle)}
+    <div class="field"><label>Format</label><select id="f-format">
+      ${['DVD','Blu-ray','4K'].map(o => `<option ${m.format===o?'selected':''}>${o}</option>`).join('')}
+    </select></div>
+    ${field('year', 'Année', m.year, 'number')}
+    <div class="field"><label>Genre</label><select id="f-genre">
+      <option value="">—</option>
+      ${GENRES.map(g => `<option ${m.genre===g?'selected':''}>${g}</option>`).join('')}
+    </select></div>
+    ${field('director', 'Réalisateur', m.director)}
+    ${field('actors', 'Acteurs', m.actors)}
+    ${field('duration', 'Durée (min)', m.duration, 'number')}
+    ${field('poster', 'URL jaquette', m.poster)}
+    <div id="poster-preview"></div>
+    <div class="field"><label>Synopsis</label><textarea id="f-synopsis">${esc(m.synopsis||'')}</textarea></div>
+    ${field('barcode', 'Code-barres', m.barcode)}
+  `;
+  $('#edit-modal').hidden = false;
+  $('#edit-backdrop').hidden = false;
+  renderPosterPreview(m.poster);
+
+  // Recherche TMDB à partir du titre saisi → remplit tous les champs + jaquette.
+  // Messages d'erreur affichés à l'écran (pas besoin de la console).
+  $('#tmdb-fill').onclick = async () => {
+    const title = $('#f-title').value.trim();
+    if (!title) { toast('Saisis d’abord un titre'); return; }
+    toast('Recherche TMDB : ' + title + '…');
+    try {
+      const key = State.settings.apiKey;
+      const url = `https://api.themoviedb.org/3/search/movie?language=fr-FR&query=${encodeURIComponent(title)}&api_key=${key}`;
+      const r = await fetch(url);
+      if (!r.ok) { alert('TMDB erreur HTTP ' + r.status + ' (clé invalide ?)'); return; }
+      const j = await r.json();
+      if (!j.results || !j.results.length) { alert('Aucun film trouvé pour « ' + title +' ».'); return; }
+      const id = j.results[0].id;
+      const dr = await fetch(`https://api.themoviedb.org/3/movie/${id}?language=fr-FR&append_to_response=credits&api_key=${key}`);
+      const d = await dr.json();
+      const director = (d.credits?.crew || []).find(c => c.job === 'Director');
+      const cast = (d.credits?.cast || []).slice(0, 5).map(c => c.name).join(', ');
+      $('#f-title').value         = d.title || title;
+      $('#f-originalTitle').value = d.original_title || '';
+      $('#f-year').value          = (d.release_date || '').slice(0, 4);
+      $('#f-director').value      = director ? director.name : '';
+      $('#f-actors').value        = cast;
+      $('#f-duration').value      = d.runtime || '';
+      $('#f-poster').value        = d.poster_path ? `https://image.tmdb.org/t/p/w500${d.poster_path}` : '';
+      $('#f-synopsis').value      = d.overview || '';
+      if (d.genres && d.genres[0]) {
+        const opt = [...$('#f-genre').options].find(o => o.value.toLowerCase() === d.genres[0].name.toLowerCase());
+        if (opt) $('#f-genre').value = opt.value;
+      }
+      renderPosterPreview($('#f-poster').value);
+      toast('Champs remplis ✅');
+    } catch (e) {
+      alert('Erreur réseau TMDB : ' + (e.message || e));
+    }
+  };
 
   $('#edit-save').onclick = async () => {
     m.title         = $('#f-title').value.trim() || 'Sans titre';
