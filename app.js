@@ -27,7 +27,7 @@ const State = {
   filters: {},         // {genre, year, format, rating}
   search: '',
   currentId: null,     // film ouvert en détail
-  settings: { theme: 'dark', apiProvider: 'tmdb', apiKey: '' },
+  settings: { theme: 'dark', apiProvider: 'tmdb', apiKey: 'ff585a6b49828b724cd3c876a48cf5e0' },
 };
 
 const GENRES = ['Action','Animation','Aventure','Comédie','Crime','Documentaire',
@@ -143,22 +143,36 @@ const MovieAPI = (() => {
 
   /* Recherche par code-barres (EAN/UPC).
      ⚠️ Réalité : ni TMDB ni OMDb n'indexent les EAN de boîtiers DVD.
-     Un vrai lookup EAN→film nécessite une API dédiée (ex. barcodelookup,
-     ou une base type Discogs/UPCitemdb) puis re-recherche par titre.
-     Ici on tente UPCitemdb (gratuit, limité) pour obtenir un libellé,
-     puis on cherche le film par ce libellé. À défaut → fiche manuelle. */
+     On tente un lookup EAN via UPCitemdb à travers un proxy CORS
+     (les appels directs sont bloqués depuis le navigateur). Si on
+     obtient un libellé, on cherche le film par titre sur TMDB.
+     À défaut, la fiche s'ouvre avec le code pré-rempli (l'utilisateur
+     complète le titre, ou utilise l'OCR de la jaquette). */
   async function searchByBarcode(ean) {
-    try {
-      const r = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${ean}`);
-      const j = await r.json();
-      const item = j.items && j.items[0];
-      if (item && item.title) {
-        const cleaned = item.title.replace(/\b(dvd|blu-?ray|4k|uhd|edition|steelbook)\b/gi, '').trim();
-        const film = await searchByTitle(cleaned);
-        if (film) return { ...film, barcode: ean };
-        return blankFromBarcode(ean, cleaned);
-      }
-    } catch (e) { /* réseau / quota → on retombe sur la saisie */ }
+    // Proxies CORS publics (on essaie dans l'ordre, ils sont parfois instables)
+    const proxies = [
+      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    ];
+    const target = `https://api.upcitemdb.com/prod/trial/lookup?upc=${ean}`;
+
+    for (const wrap of proxies) {
+      try {
+        const r = await fetch(wrap(target));
+        if (!r.ok) continue;
+        const j = await r.json();
+        const item = j.items && j.items[0];
+        if (item && item.title) {
+          const cleaned = item.title
+            .replace(/\b(dvd|blu-?ray|4k|uhd|edition|steelbook|combo|coffret)\b/gi, '')
+            .replace(/\s+/g, ' ').trim();
+          const film = await searchByTitle(cleaned);
+          if (film) return { ...film, barcode: ean };
+          return blankFromBarcode(ean, cleaned); // titre deviné, à valider
+        }
+      } catch (e) { /* proxy KO, on essaie le suivant */ }
+    }
+    // Aucun résultat : fiche avec code pré-rempli
     return blankFromBarcode(ean, '');
   }
 
@@ -196,12 +210,12 @@ const MovieAPI = (() => {
 
 // ⬇️⬇️⬇️  REMPLACE CES VALEURS PAR TA CONFIG FIREBASE  ⬇️⬇️⬇️
 const FIREBASE_CONFIG = {
-  apiKey:            "TON_API_KEY",
-  authDomain:        "TON_PROJET.firebaseapp.com",
-  projectId:         "TON_PROJET",
-  storageBucket:     "TON_PROJET.firebasestorage.app",
-  messagingSenderId: "TON_SENDER_ID",
-  appId:             "TON_APP_ID",
+  apiKey:            "AIzaSyAeodo3johut0aZNYzfkSmnSs8eqFf6J-U",
+  authDomain:        "dvdtheque-280da.firebaseapp.com",
+  projectId:         "dvdtheque-280da",
+  storageBucket:     "dvdtheque-280da.firebasestorage.app",
+  messagingSenderId: "620487889182",
+  appId:             "1:620487889182:web:656118ca705533d642f90f",
 };
 // ⬆️⬆️⬆️  REMPLACE CES VALEURS PAR TA CONFIG FIREBASE  ⬆️⬆️⬆️
 
@@ -874,26 +888,7 @@ function openEditor(data, isEdit = false) {
     id: uid(), addedAt: Date.now(), format: 'DVD', rating: 0,
     audio: [], textComments: [], ...data,
   };
-  $('#edit-title-h').textContent = isEdit ? 'Modifier' : 'Nouveau film';
-  $('#edit-form').innerHTML = `
-    ${field('title', 'Titre', m.title)}
-    ${field('originalTitle', 'Titre original', m.originalTitle)}
-    <div class="field"><label>Format</label><select id="f-format">
-      ${['DVD','Blu-ray','4K'].map(o => `<option ${m.format===o?'selected':''}>${o}</option>`).join('')}
-    </select></div>
-    ${field('year', 'Année', m.year, 'number')}
-    <div class="field"><label>Genre</label><select id="f-genre">
-      <option value="">—</option>
-      ${GENRES.map(g => `<option ${m.genre===g?'selected':''}>${g}</option>`).join('')}
-    </select></div>
-    ${field('director', 'Réalisateur', m.director)}
-    ${field('actors', 'Acteurs', m.actors)}
-    ${field('duration', 'Durée (min)', m.duration, 'number')}
-    ${field('poster', 'URL jaquette', m.poster)}
-    <div class="field"><label>Synopsis</label><textarea id="f-synopsis">${esc(m.synopsis||'')}</textarea></div>
-    ${field('barcode', 'Code-barres', m.barcode)}
-  `;
-  $('#edit-modal').hidden = false; $('#edit-backdrop').hidden = false;
+
 
   $('#edit-save').onclick = async () => {
     m.title         = $('#f-title').value.trim() || 'Sans titre';
@@ -922,6 +917,15 @@ function field(key, label, val, type = 'text') {
 }
 function closeEditor() { $('#edit-modal').hidden = true; $('#edit-backdrop').hidden = true; }
 
+/* Aperçu de la jaquette dans l'éditeur */
+function renderPosterPreview(url) {
+  const box = $('#poster-preview');
+  if (!box) return;
+  box.innerHTML = url
+    ? `<img src="${esc(url)}" alt="jaquette" style="max-width:120px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px" />`
+    : '';
+}
+
 /* ---- Partage ---- */
 async function shareMovie(m) {
   const txt = `🎬 ${m.title} (${m.year})\n${m.genre} · ${m.format}\nNote : ${'★'.repeat(m.rating||0)}\n${m.synopsis || ''}`;
@@ -941,11 +945,27 @@ function closeSheet() { $('#add-sheet').hidden = true;  $('#sheet-backdrop').hid
 async function startScanFlow() {
   closeSheet();
   Scanner.start(async (ean) => {
-    toast('Code détecté : ' + ean);
+    toast('Code détecté : ' + ean + ' — recherche…');
     const film = await MovieAPI.searchByBarcode(ean);
-    openEditor(film); // pré-rempli (ou vierge si lookup échoue), l'utilisateur valide
+    // Si on a trouvé un vrai film (titre + jaquette), on ouvre la fiche pré-remplie.
+    if (film.title && film.poster) {
+      toast('Film trouvé ✅');
+      openEditor(film);
+      return;
+    }
+    // Sinon : code lu mais film non identifié (limite des bases EAN→DVD).
+    // On propose de photographier la jaquette pour l'OCR, sinon saisie manuelle.
+    if (confirm(`Code-barres lu (${ean}) mais film non identifié automatiquement.\n\nOK = photographier la jaquette pour reconnaissance.\nAnnuler = saisir le titre à la main.`)) {
+      pendingBarcode = ean;       // on gardera le code pour l'attacher au film
+      startPhotoFlow();
+    } else {
+      openEditor(film);           // fiche avec le code pré-rempli
+    }
   });
 }
+
+// Code-barres en attente d'être rattaché à un film créé via OCR
+let pendingBarcode = '';
 
 /* ---- Flux d'ajout par photo de jaquette (OCR) ---- */
 function startPhotoFlow() {
@@ -991,14 +1011,7 @@ async function runOCR(dataURL) {
   }
 }
 
-/* Recherche le titre choisi sur TMDB puis ouvre l'éditeur pré-rempli */
-async function ocrSearchTitle(title) {
-  closeOcrModal();
-  toast('Recherche : ' + title);
-  const film = await MovieAPI.searchByTitle(title);
-  if (film) openEditor({ ...film });
-  else openEditor(MovieAPI.blankFromBarcode('', title)); // au moins le titre pré-rempli
-}
+
 
 /* --- Modale OCR (réutilise le backdrop d'édition) --- */
 function showOcrModal() {
