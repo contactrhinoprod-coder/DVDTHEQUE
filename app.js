@@ -1599,11 +1599,34 @@ function setupCrop(dataURL) {
 
 /* ---- Filtres (prompt simple, pas de lib) ---- */
 function openFilters() {
-  const genre = prompt('Filtrer par genre (vide = tous) :\n' + GENRES.join(', '), State.filters.genre || '');
-  if (genre !== null) {
-    if (genre.trim()) State.filters.genre = genre.trim(); else delete State.filters.genre;
+  // Genres réellement présents dans la collection (selon le format actif)
+  let base = State.movies;
+  if (State.formatFilter) base = base.filter(m => (m.format || 'DVD') === State.formatFilter);
+  const genres = [...new Set(base.map(m => m.genre).filter(Boolean))].sort();
+
+  showOcrModal();
+  const modal = $('#ocr-modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <button class="btn-ghost" id="ocr-cancel" style="width:auto">Fermer</button>
+      <strong>Filtrer par genre</strong><span></span>
+    </div>
+    <div class="modal-body">
+      <div class="genre-list">
+        <button class="genre-item ${!State.filters.genre ? 'active' : ''}" data-g="">Tous les genres</button>
+        ${genres.map(g => `
+          <button class="genre-item ${State.filters.genre === g ? 'active' : ''}" data-g="${esc(g)}">${esc(g)}</button>
+        `).join('')}
+      </div>
+      ${genres.length ? '' : '<p class="muted small" style="margin-top:12px">Aucun genre dans la collection pour ce format.</p>'}
+    </div>`;
+  $$('.genre-item', modal).forEach(b => b.addEventListener('click', () => {
+    const g = b.dataset.g;
+    if (g) State.filters.genre = g; else delete State.filters.genre;
+    closeOcrModal();
     renderLibrary();
-  }
+  }));
+  $('#ocr-cancel').addEventListener('click', closeOcrModal);
 }
 
 /* ---- Import / Export ---- */

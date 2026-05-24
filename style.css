@@ -427,3 +427,13 @@ html, body {
   background: var(--accent); color: #fff; border-color: var(--accent);
 }
 .format-seg button:active { opacity: .8; }
+
+/* ====================== LISTE DES GENRES (filtre) ====================== */
+.genre-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.genre-item {
+  width: 100%; text-align: left; padding: 13px 16px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: .95rem; cursor: pointer;
+}
+.genre-item.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.genre-item:active { opacity: .8; }
