@@ -1,22 +1,28 @@
-/* DVDthèque — service worker (mode DÉVELOPPEMENT, sans cache)
-   Pendant la phase de test, on ne met RIEN en cache : chaque
-   rechargement sert toujours la dernière version des fichiers.
-   On purge aussi les anciens caches de la version précédente.
-   (On réactivera le cache offline quand l'app sera stable.) */
+/* DVDthèque — service worker (mode DÉVELOPPEMENT, ZÉRO cache)
+   - Ne met jamais rien en cache.
+   - Supprime tous les anciens caches au démarrage.
+   - Prend le contrôle immédiatement (skipWaiting + clients.claim).
+   - Réseau uniquement : on voit toujours la dernière version. */
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting(); // prend le contrôle immédiatement
+const SW_VERSION = 'dev-nocache-v3';
+
+self.addEventListener('install', () => {
+  self.skipWaiting(); // ne pas attendre la fermeture des onglets
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.map(k => caches.delete(k)))) // vide tout
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    // Purge tous les caches existants (vestiges des anciennes versions)
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+    await self.clients.claim(); // prend la main sur les pages ouvertes
+  })());
 });
 
-// Toujours aller au réseau, jamais le cache
+// Toujours réseau, jamais de cache. (HTML/JS/CSS toujours frais.)
 self.addEventListener('fetch', (e) => {
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // On ne touche pas aux requêtes cross-origin (TMDB, Firebase, gstatic…)
+  e.respondWith(
+    fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request))
+  );
 });

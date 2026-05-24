@@ -1527,9 +1527,12 @@ async function boot() {
   bindEvents();
   bindLogin();
 
-  // Service worker (offline)
+  // Service worker (offline). On force la vérification de mise à jour
+  // à chaque chargement pour ne jamais rester bloqué sur une vieille version.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      reg.update(); // cherche une nouvelle version tout de suite
+    }).catch(() => {});
   }
 
   if (Cloud.configured()) {
