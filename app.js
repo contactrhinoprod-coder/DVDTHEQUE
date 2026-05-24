@@ -573,7 +573,41 @@ const OCR = (() => {
   }
 
   // image = dataURL ; onProgress = callback(0..1)
+  // URL de la Cloud Function Google Vision (déployée par l'utilisateur)
+  const CLOUD_OCR_URL = 'https://europe-west1-dvdtheque-280da.cloudfunctions.net/ocr';
+
+  // OCR via Google Cloud Vision (bien meilleur que Tesseract).
+  // Renvoie le même format { candidates, rawText } ou lève une erreur.
+  async function recognizeCloud(dataURL, onProgress) {
+    if (onProgress) onProgress(0.3); // pas de vraie progression côté serveur
+    const r = await fetch(CLOUD_OCR_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataURL }),
+    });
+    if (onProgress) onProgress(0.9);
+    if (!r.ok) throw new Error('Cloud OCR HTTP ' + r.status);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    const lines = (j.lines || []).filter(t =>
+      t.length >= 2 &&
+      !/^(dvd|blu-?ray|4k|uhd|tous droits|all rights|©|warner|universal|sony|paramount|fox|disney)/i.test(t)
+    );
+    if (onProgress) onProgress(1);
+    return { candidates: lines.slice(0, 8), rawText: j.fullText || '' };
+  }
+
   async function recognize(dataURL, onProgress) {
+    // 1) On tente Google Cloud Vision (qualité nettement supérieure)
+    try {
+      const cloud = await recognizeCloud(dataURL, onProgress);
+      if (cloud.candidates.length) return cloud;
+      // Vision a répondu mais rien trouvé → on tente quand même Tesseract
+    } catch (e) {
+      console.warn('Cloud Vision indisponible, repli Tesseract:', e);
+    }
+
+    // 2) Repli : Tesseract local
     await loadLib();
     if (!worker) {
       worker = await window.Tesseract.createWorker('fra+eng', 1, {
@@ -582,13 +616,12 @@ const OCR = (() => {
         },
       });
     }
-    // Paramètres Tesseract orientés "bloc de texte" (titres)
     try {
       await worker.setParameters({
-        tessedit_pageseg_mode: '6', // bloc uniforme de texte
+        tessedit_pageseg_mode: '6',
         preserve_interword_spaces: '1',
       });
-    } catch (e) { /* selon version, certains params peuvent manquer */ }
+    } catch (e) { /* selon version */ }
 
     const canvas = await preprocess(dataURL);
     const { data } = await worker.recognize(canvas);
