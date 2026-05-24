@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>DVDthèque — Ma Collection</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./style.css?v=21" />
+  <link rel="stylesheet" href="./style.css?v=24" />
 </head>
 <body>
   <!-- ====================== ÉCRAN DE CONNEXION ====================== -->
@@ -112,6 +112,11 @@
         </div>
       </section>
 
+      <!-- ---------- VUE : Quiz ---------- -->
+      <section class="view" data-view="quiz" hidden>
+        <div id="quiz-content" class="quiz-wrap"></div>
+      </section>
+
       <!-- ---------- VUE : Profil / réglages ---------- -->
       <section class="view" data-view="profile" hidden>
         <div class="profile-wrap">
@@ -141,6 +146,7 @@
       <button class="tab" data-go="wishlist"><span>♡</span>Wishlist</button>
       <button class="tab" id="add-tab"><span class="add-plus">＋</span></button>
       <button class="tab" data-go="random"><span>🎲</span>Aléatoire</button>
+      <button class="tab" data-go="quiz"><span>❓</span>Quiz</button>
       <button class="tab" data-go="profile"><span>☰</span>Profil</button>
     </nav>
 
@@ -183,6 +189,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="./app.js?v=21"></script>
+  <script src="./app.js?v=24"></script>
 </body>
 </html>

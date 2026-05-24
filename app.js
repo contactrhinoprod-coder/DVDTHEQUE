@@ -719,7 +719,7 @@ function go(view, opts = {}) {
   $$('.view').forEach(v => (v.hidden = v.dataset.view !== view));
   $$('.tab[data-go]').forEach(t => t.classList.toggle('active', t.dataset.go === view));
 
-  const titles = { library: 'DVDthèque', wishlist: 'Wishlist', random: 'Aléatoire', profile: 'Profil', detail: '' };
+  const titles = { library: 'DVDthèque', wishlist: 'Wishlist', random: 'Aléatoire', quiz: 'Quiz', profile: 'Profil', detail: '' };
   $('#topbar-title').textContent = opts.title || titles[view] || '';
   $('#back-btn').hidden = view !== 'detail';
   $('#search-toggle').hidden = view !== 'library';
@@ -728,6 +728,7 @@ function go(view, opts = {}) {
   if (view === 'library') renderLibrary();
   if (view === 'wishlist') renderWishlist();
   if (view === 'random') renderRandomView();
+  if (view === 'quiz') renderQuizHome();
   if (view === 'profile') renderProfile();
   $('#views').scrollTop = 0;
 }
@@ -1959,6 +1960,278 @@ async function configureAPI() {
     await Store.setKV('settings', State.settings);
     toast('Réglages API enregistrés');
   }
+}
+
+/* ============================================================
+   QUIZ — connaissance de sa collection
+   Génère des questions à choix multiple à partir des films de la
+   collection (pas wishlist). Plusieurs types de questions par film.
+   Packs de 10. Code couleur vert/rouge. Score final. Stats par film
+   sauvegardées (localement + cloud) pour : évaluation globale + faire
+   revenir plus souvent les films à faible score.
+   ============================================================ */
+const Quiz = (() => {
+  const PACK_SIZE = 10;
+  let pack = [];        // questions du pack courant
+  let idx = 0;          // index question courante
+  let correct = 0;      // bonnes réponses du pack
+  let answered = false; // a-t-on déjà répondu à la question affichée
+  let stats = null;     // { films: {id: {asked, correct}}, totalAsked, totalCorrect, packs }
+
+  // Charge les stats depuis le stockage (clé 'quizStats')
+  async function loadStats() {
+    if (stats) return stats;
+    stats = (await Store.getKV('quizStats')) || { films: {}, totalAsked: 0, totalCorrect: 0, packs: 0 };
+    return stats;
+  }
+  async function saveStats() {
+    await Store.setKV('quizStats', stats);
+  }
+
+  // Films jouables = collection (hors wishlist) avec au moins un titre
+  function pool() {
+    return State.movies.filter(m => !m.wishlist && m.title);
+  }
+
+  // Choisit n éléments distincts au hasard dans un tableau
+  function sample(arr, n) {
+    const c = [...arr];
+    const out = [];
+    while (c.length && out.length < n) {
+      out.push(c.splice(Math.floor(Math.random() * c.length), 1)[0]);
+    }
+    return out;
+  }
+  function shuffle(arr) { return sample(arr, arr.length); }
+
+  // Types de questions générables pour un film, selon ses données dispo
+  function buildQuestion(film, all) {
+    const types = [];
+    if (film.director) types.push('director');
+    if (film.year) types.push('year');
+    if (film.actors) types.push('actor');
+    if (film.genre) types.push('genre');
+    if (film.synopsis && film.synopsis.length > 30) types.push('synopsis');
+    if (film.poster) types.push('poster');
+    if (!types.length) return null;
+    const type = sample(types, 1)[0];
+
+    const others = all.filter(m => m.id !== film.id);
+    const wrongFrom = (key, val) => {
+      const vals = [...new Set(others.map(m => m[key]).filter(v => v && v !== val))];
+      return sample(vals, 3);
+    };
+
+    let q, answer, options, image = null;
+    switch (type) {
+      case 'director': {
+        q = `Qui a réalisé « ${film.title} » ?`;
+        answer = film.director;
+        options = shuffle([answer, ...wrongFrom('director', answer)]);
+        break;
+      }
+      case 'year': {
+        q = `En quelle année est sorti « ${film.title} » ?`;
+        answer = String(film.year);
+        const wrongYears = [];
+        while (wrongYears.length < 3) {
+          const delta = (Math.floor(Math.random() * 11) - 5);
+          const y = String(Number(film.year) + delta);
+          if (y !== answer && !wrongYears.includes(y)) wrongYears.push(y);
+        }
+        options = shuffle([answer, ...wrongYears]);
+        break;
+      }
+      case 'actor': {
+        const firstActor = film.actors.split(',')[0].trim();
+        q = `Quel acteur joue dans « ${film.title} » ?`;
+        answer = firstActor;
+        const otherActors = [...new Set(others
+          .map(m => (m.actors || '').split(',')[0].trim())
+          .filter(a => a && a !== answer))];
+        options = shuffle([answer, ...sample(otherActors, 3)]);
+        break;
+      }
+      case 'genre': {
+        q = `À quel genre appartient « ${film.title} » ?`;
+        answer = film.genre;
+        const otherGenres = GENRES.filter(g => g !== answer);
+        options = shuffle([answer, ...sample(otherGenres, 3)]);
+        break;
+      }
+      case 'synopsis': {
+        q = `Quel film correspond à ce résumé ?\n\n« ${film.synopsis.slice(0, 160)}… »`;
+        answer = film.title;
+        options = shuffle([answer, ...wrongFrom('title', answer)]);
+        break;
+      }
+      case 'poster': {
+        q = `Quel est ce film ?`;
+        answer = film.title;
+        image = film.poster;
+        options = shuffle([answer, ...wrongFrom('title', answer)]);
+        break;
+      }
+    }
+    // Il faut au moins 2 options valides
+    options = options.filter(Boolean);
+    if (options.length < 2 || !answer) return null;
+    return { filmId: film.id, q, answer, options, image };
+  }
+
+  // Construit un pack de 10 questions, en privilégiant les films à faible score
+  function buildPack() {
+    const films = pool();
+    if (films.length < 4) return [];
+
+    // Poids : films souvent ratés ou jamais vus reviennent plus souvent
+    const weighted = [];
+    films.forEach(m => {
+      const s = stats.films[m.id];
+      let weight = 3; // par défaut
+      if (s && s.asked > 0) {
+        const rate = s.correct / s.asked;
+        weight = rate < 0.5 ? 6 : rate < 0.8 ? 3 : 1; // mauvais score -> plus fréquent
+      } else {
+        weight = 4; // jamais posé -> un peu prioritaire
+      }
+      for (let i = 0; i < weight; i++) weighted.push(m);
+    });
+
+    const out = [];
+    let guard = 0;
+    while (out.length < PACK_SIZE && guard < 200) {
+      guard++;
+      const film = sample(weighted, 1)[0];
+      const question = buildQuestion(film, films);
+      if (question) out.push(question);
+    }
+    return out;
+  }
+
+  async function start() {
+    await loadStats();
+    pack = buildPack();
+    idx = 0; correct = 0; answered = false;
+    if (!pack.length) { renderQuizHome(); return; }
+    renderQuestion();
+  }
+
+  function renderQuestion() {
+    const box = $('#quiz-content');
+    const question = pack[idx];
+    answered = false;
+    box.innerHTML = `
+      <div class="quiz-head">
+        <span>Question ${idx + 1}/${pack.length}</span>
+        <span>Score : ${correct}</span>
+      </div>
+      ${question.image ? `<div class="quiz-image" style="background-image:url('${question.image}')"></div>` : ''}
+      <div class="quiz-q">${esc(question.q).replace(/\n/g, '<br>')}</div>
+      <div class="quiz-options">
+        ${question.options.map((o, i) => `<button class="quiz-opt" data-i="${i}">${esc(o)}</button>`).join('')}
+      </div>
+      <button class="btn-primary" id="quiz-next" hidden>${idx + 1 < pack.length ? 'Question suivante' : 'Voir le résultat'}</button>
+    `;
+    $$('.quiz-opt', box).forEach(b =>
+      b.addEventListener('click', () => answerQuestion(b, question)));
+    $('#quiz-next').addEventListener('click', () => {
+      idx++;
+      if (idx < pack.length) renderQuestion();
+      else finishPack();
+    });
+  }
+
+  async function answerQuestion(btn, question) {
+    if (answered) return;
+    answered = true;
+    const chosen = question.options[+btn.dataset.i];
+    const isRight = chosen === question.answer;
+
+    // Code couleur
+    $$('.quiz-opt').forEach(b => {
+      b.disabled = true;
+      const val = question.options[+b.dataset.i];
+      if (val === question.answer) b.classList.add('right');      // bonne réponse en vert
+      else if (b === btn) b.classList.add('wrong');               // mauvaise choisie en rouge
+    });
+    if (isRight) correct++;
+
+    // Maj stats par film
+    const s = stats.films[question.filmId] || { asked: 0, correct: 0 };
+    s.asked++; if (isRight) s.correct++;
+    stats.films[question.filmId] = s;
+    stats.totalAsked++; if (isRight) stats.totalCorrect++;
+
+    $('#quiz-next').hidden = false;
+  }
+
+  async function finishPack() {
+    stats.packs = (stats.packs || 0) + 1;
+    await saveStats();
+
+    const pct = Math.round((correct / pack.length) * 100);
+    const globalPct = stats.totalAsked ? Math.round((stats.totalCorrect / stats.totalAsked) * 100) : 0;
+    const box = $('#quiz-content');
+    box.innerHTML = `
+      <div class="quiz-result">
+        <div class="quiz-score-big">${correct}/${pack.length}</div>
+        <p class="muted">${pct}% de bonnes réponses sur ce quiz</p>
+        <div class="quiz-eval">
+          <div class="lbl">Connaissance de votre collection</div>
+          <div class="quiz-eval-pct">${globalPct}%</div>
+          <div class="quiz-level">${levelLabel(globalPct)}</div>
+          <div class="muted small">Évaluation sur ${stats.totalAsked} question(s) au total · ${stats.packs} quiz joué(s)</div>
+        </div>
+        <button class="btn-primary" id="quiz-again">Nouveau quiz</button>
+        <button class="btn-ghost" id="quiz-home">Retour</button>
+      </div>`;
+    $('#quiz-again').addEventListener('click', () => start());
+    $('#quiz-home').addEventListener('click', () => renderQuizHome());
+  }
+
+  function levelLabel(pct) {
+    if (pct >= 90) return '🏆 Expert de votre collection';
+    if (pct >= 75) return '🎬 Grand connaisseur';
+    if (pct >= 50) return '🍿 Bon amateur';
+    if (pct >= 25) return '👀 Débutant';
+    return '🌱 À découvrir';
+  }
+
+  return { start, loadStats, levelLabel, getStats: () => stats };
+})();
+
+/* Écran d'accueil du Quiz */
+async function renderQuizHome() {
+  const box = $('#quiz-content');
+  const films = State.movies.filter(m => !m.wishlist && m.title);
+  if (films.length < 4) {
+    box.innerHTML = `
+      <div class="quiz-intro">
+        <div class="quiz-icon">❓</div>
+        <h2>Quiz collection</h2>
+        <p class="muted">Ajoutez au moins 4 films à votre collection pour débloquer le quiz. (Vous en avez ${films.length}.)</p>
+      </div>`;
+    return;
+  }
+  await Quiz.loadStats();
+  const s = Quiz.getStats();
+  const globalPct = s && s.totalAsked ? Math.round((s.totalCorrect / s.totalAsked) * 100) : null;
+  box.innerHTML = `
+    <div class="quiz-intro">
+      <div class="quiz-icon">❓</div>
+      <h2>Quiz collection</h2>
+      <p class="muted">Testez votre connaissance de vos ${films.length} films. 10 questions par partie.</p>
+      ${globalPct != null ? `
+        <div class="quiz-eval">
+          <div class="lbl">Votre niveau actuel</div>
+          <div class="quiz-eval-pct">${globalPct}%</div>
+          <div class="quiz-level">${Quiz.levelLabel(globalPct)}</div>
+          <div class="muted small">${s.totalAsked} question(s) · ${s.packs || 0} quiz joué(s)</div>
+        </div>` : ''}
+      <button class="btn-primary" id="quiz-start">${globalPct != null ? 'Rejouer un quiz' : 'Commencer le quiz'}</button>
+    </div>`;
+  $('#quiz-start').addEventListener('click', () => Quiz.start());
 }
 
 /* ============================================================
