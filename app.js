@@ -1143,7 +1143,7 @@ function renderPosterPreview(url) {
 
 /* ---- Partage ---- */
 async function shareMovie(m) {
-  // Texte complet
+  // Texte : infos du film + commentaires écrits
   const lines = [];
   lines.push(`🎬 ${m.title}${m.year ? ' (' + m.year + ')' : ''}`);
   if (m.director) lines.push(`Réalisateur : ${m.director}`);
@@ -1151,56 +1151,43 @@ async function shareMovie(m) {
   if (m.format)   lines.push(`Format : ${m.format}`);
   if (m.rating)   lines.push(`Note : ${'★'.repeat(m.rating)}${'☆'.repeat(5 - m.rating)}`);
   if (m.synopsis) lines.push(`\n${m.synopsis}`);
-  // Commentaires écrits
   const texts = (m.textComments || []).map(c => c.text).filter(Boolean);
   if (texts.length) {
     lines.push(`\n📝 Commentaires :`);
     texts.forEach(t => lines.push(`• ${t}`));
   }
-  const audioCount = (m.audio || []).length;
-  if (audioCount) lines.push(`\n🎙️ ${audioCount} commentaire(s) audio joint(s)`);
   const txt = lines.join('\n');
 
-  // Prépare les fichiers à joindre (affiche + audio)
-  const files = [];
-  // Affiche
+  // On joint UNIQUEMENT l'affiche (compatible WhatsApp/Messenger).
+  // Pas d'audio : il faisait échouer le partage sur ces apps.
+  let posterFile = null;
   if (m.poster) {
     try {
       const resp = await fetch(m.poster);
       const blob = await resp.blob();
       const ext = (blob.type.split('/')[1] || 'jpg').split('+')[0];
-      files.push(new File([blob], `${m.title}.${ext}`, { type: blob.type }));
-    } catch (e) { /* affiche non jointe, on garde le lien dans le texte */ }
-  }
-  // Audio (base64 dataURL -> File)
-  for (let i = 0; i < (m.audio || []).length; i++) {
-    try {
-      const a = m.audio[i];
-      const resp = await fetch(a.data); // dataURL
-      const blob = await resp.blob();
-      const ext = (blob.type.split('/')[1] || 'webm').split(';')[0];
-      files.push(new File([blob], `${m.title}-commentaire${i + 1}.${ext}`, { type: blob.type }));
-    } catch (e) { /* cet audio ne sera pas joint */ }
+      posterFile = new File([blob], `${m.title}.${ext}`, { type: blob.type });
+    } catch (e) { /* affiche non récupérée */ }
   }
 
-  const shareText = m.poster && !files.some(f => f.type.startsWith('image'))
-    ? txt + `\n\nAffiche : ${m.poster}`   // si l'affiche n'a pas pu être jointe, on met le lien
-    : txt;
-
-  // Partage natif avec fichiers si supporté
-  if (navigator.canShare && files.length && navigator.canShare({ files })) {
+  // 1) Tentative : texte + affiche
+  if (posterFile && navigator.canShare && navigator.canShare({ files: [posterFile] })) {
     try {
-      await navigator.share({ title: m.title, text: shareText, files });
+      await navigator.share({ title: m.title, text: txt, files: [posterFile] });
       return;
-    } catch (e) { if (e.name === 'AbortError') return; /* sinon on tente sans fichiers */ }
+    } catch (e) {
+      if (e.name === 'AbortError') return; // l'utilisateur a annulé
+      // sinon (app qui refuse les fichiers) -> on retombe sur texte seul
+    }
   }
-  // Partage natif texte seul
+  // 2) Repli : texte seul (+ lien de l'affiche s'il y en a une)
+  const txtWithLink = m.poster ? `${txt}\n\nAffiche : ${m.poster}` : txt;
   if (navigator.share) {
-    try { await navigator.share({ title: m.title, text: shareText }); return; }
+    try { await navigator.share({ title: m.title, text: txtWithLink }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
-  // Repli : presse-papier
-  await navigator.clipboard?.writeText(shareText);
+  // 3) Repli ultime : presse-papier
+  await navigator.clipboard?.writeText(txtWithLink);
   toast('Copié dans le presse-papier');
 }
 
@@ -1739,19 +1726,29 @@ async function exportPDF() {
   const posterH = cellW * 1.4;      // ratio affiche ~ 1:1.4
   const textH = 20;                 // hauteur réservée au texte sous l'affiche
   const cellH = posterH + textH;
-  const rowsPerPage = Math.floor((pageH - margin * 2 - 14) / (cellH + gap));
+  const headerH = 22;  // hauteur réservée à l'en-tête (titre + 2 lignes)
+  const rowsPerPage = Math.floor((pageH - margin * 2 - headerH) / (cellH + gap));
 
   // Titre du document
   pdf.setFontSize(18);
   pdf.text('Ma DVDthèque', margin, margin + 4);
   pdf.setFontSize(10);
   pdf.setTextColor(120);
-  const sub = (State.formatFilter ? State.formatFilter + ' · ' : '') + movies.length + ' film(s)';
-  pdf.text(sub, margin, margin + 10);
+  // Portée : toute la collection ou filtre appliqué
+  const portee = State.formatFilter
+    ? `Format : ${State.formatFilter}`
+    : 'Collection complète';
+  const genreFiltre = State.filters.genre ? ` · Genre : ${State.filters.genre}` : '';
+  pdf.text(`${portee}${genreFiltre} — ${movies.length} film(s)`, margin, margin + 10);
+  // Date de création du PDF
+  const dateStr = new Date().toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  });
+  pdf.text(`Généré le ${dateStr}`, margin, margin + 15);
   pdf.setTextColor(0);
 
   let col = 0, row = 0;
-  const startY = margin + 14;
+  const startY = margin + headerH;
 
   for (let i = 0; i < movies.length; i++) {
     const m = movies[i];
@@ -2039,11 +2036,8 @@ function bindEvents() {
   $('#random-open').addEventListener('click', () => randomPick && openDetail(randomPick.id));
 
   // Profile
-  $('#set-export').addEventListener('click', exportJSON);
   $('#set-pdf').addEventListener('click', exportPDF);
-  $('#set-import').addEventListener('click', importJSON);
   $('#set-theme').addEventListener('click', toggleTheme);
-  $('#set-api').addEventListener('click', configureAPI);
   $('#set-cloud').addEventListener('click', () => {
     if (Cloud.user && Cloud.user()) cloudSignOut();
     else cloudSignIn();
