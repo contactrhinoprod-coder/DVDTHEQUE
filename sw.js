@@ -1,27 +1,22 @@
-/* DVDthèque — service worker (offline-first cache) */
-const CACHE = 'dvdtheque-v1';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json'];
+/* DVDthèque — service worker (mode DÉVELOPPEMENT, sans cache)
+   Pendant la phase de test, on ne met RIEN en cache : chaque
+   rechargement sert toujours la dernière version des fichiers.
+   On purge aussi les anciens caches de la version précédente.
+   (On réactivera le cache offline quand l'app sera stable.) */
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  self.skipWaiting(); // prend le contrôle immédiatement
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys()
+      .then(keys => Promise.all(keys.map(k => caches.delete(k)))) // vide tout
       .then(() => self.clients.claim())
   );
 });
 
+// Toujours aller au réseau, jamais le cache
 self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
-  // Ne jamais mettre en cache les appels API externes ni les images TMDB
-  if (url.origin !== location.origin) return;
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match('./index.html')))
-  );
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
