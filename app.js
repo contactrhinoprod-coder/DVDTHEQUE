@@ -1026,7 +1026,7 @@ function renderProfile() {
 }
 
 /* ---- Éditeur de fiche (ajout/modif manuels) ---- */
-function openEditor(data, isEdit = false) {
+function openEditor(data, isEdit = false, onDone = null) {
   closeSheet();
   const m = isEdit ? data : {
     id: uid(), addedAt: Date.now(), format: 'DVD', rating: 0,
@@ -1112,9 +1112,13 @@ function openEditor(data, isEdit = false) {
     if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
     closeEditor();
     toast(isEdit ? 'Film modifié' : 'Film ajouté');
+    if (typeof onDone === 'function') { onDone(true); return; } // import : titre suivant
     isEdit ? renderDetail(m) : go('library');
   };
-  $('#edit-cancel').onclick = closeEditor;
+  $('#edit-cancel').onclick = () => {
+    closeEditor();
+    if (typeof onDone === 'function') onDone(false); // import : on passe ce titre
+  };
 }
 function field(key, label, val, type = 'text') {
   return `<div class="field"><label>${label}</label>
@@ -1196,6 +1200,79 @@ function fileToDataURL(file) {
     r.onload = () => res(r.result);
     r.readAsDataURL(file);
   });
+}
+
+/* ============================================================
+   IMPORT D'UNE LISTE DE TITRES (copier-coller)
+   L'utilisateur colle une liste (un titre par ligne). Pour chaque
+   titre : recherche TMDB -> choix du bon résultat -> éditeur complet
+   pré-rempli -> validation -> titre suivant automatiquement.
+   ============================================================ */
+let importQueue = [];   // titres restants à traiter
+let importIndex = 0;    // position courante (pour l'affichage "x sur n")
+let importTotal = 0;
+
+function startImportFlow() {
+  closeSheet();
+  showOcrModal(); // on réutilise la modale OCR
+  setOcrState('import-input', {});
+}
+
+// Démarre le traitement de la liste collée
+function beginImport(text) {
+  const titles = text.split('\n')
+    .map(t => t.trim())
+    .filter(t => t.length >= 1);
+  if (!titles.length) { closeOcrModal(); toast('Liste vide'); return; }
+  importQueue = titles;
+  importIndex = 0;
+  importTotal = titles.length;
+  processNextImport();
+}
+
+// Traite le titre courant de la file
+async function processNextImport() {
+  if (!importQueue.length) {
+    closeOcrModal();
+    toast('Import terminé ✅');
+    go('library');
+    return;
+  }
+  importIndex = importTotal - importQueue.length + 1;
+  const title = importQueue[0];
+
+  showOcrModal();
+  setOcrState('import-progress', { title, index: importIndex, total: importTotal });
+
+  const results = await MovieAPI.searchMulti(title);
+  if (!results.length) {
+    // Rien trouvé : on ouvre l'éditeur avec juste le titre, puis suivant
+    closeOcrModal();
+    importQueue.shift();
+    openEditor({ title }, false, () => processNextImport());
+    return;
+  }
+  // On affiche les résultats à choisir (avec contexte d'import)
+  setOcrState('import-choose', { title, results, index: importIndex, total: importTotal });
+}
+
+// L'utilisateur a choisi un résultat TMDB pour le titre d'import courant
+async function pickImportResult(id) {
+  closeOcrModal();
+  importQueue.shift();
+  let film = { };
+  if (id) {
+    toast('Chargement de la fiche…');
+    film = await MovieAPI.getDetails(id) || {};
+  }
+  // Éditeur complet pré-rempli ; à la validation OU annulation -> titre suivant
+  openEditor({ ...film }, false, () => processNextImport());
+}
+
+// L'utilisateur saute le titre courant
+function skipImport() {
+  importQueue.shift();
+  processNextImport();
 }
 
 /* Recadre l'image sur la zone choisie (en %) et renvoie un dataURL */
@@ -1308,6 +1385,61 @@ function setOcrState(state, data = {}) {
       </div>`;
     setupCrop(data.dataURL);
     $('#ocr-cancel').addEventListener('click', closeOcrModal);
+  } else if (state === 'import-input') {
+    modal.innerHTML = `
+      <div class="modal-head">
+        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
+        <strong>Importer une liste</strong><span></span>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">Collez votre liste de films, <b>un titre par ligne</b>. Vous validerez chaque film un par un.</p>
+        <div class="field" style="margin-top:12px">
+          <textarea id="import-textarea" rows="10" placeholder="Casino&#10;Le Parrain&#10;Heat&#10;Pulp Fiction&#10;…"></textarea>
+        </div>
+        <button class="btn-primary" id="import-start-btn">Importer ces films</button>
+      </div>`;
+    $('#import-start-btn').addEventListener('click', () => {
+      const txt = $('#import-textarea').value;
+      if (txt.trim()) beginImport(txt);
+    });
+    $('#ocr-cancel').addEventListener('click', closeOcrModal);
+  } else if (state === 'import-progress') {
+    modal.innerHTML = `
+      <div class="modal-head">
+        <span></span><strong>Import ${data.index}/${data.total}</strong><span></span>
+      </div>
+      <div class="modal-body" style="text-align:center;padding-top:40px">
+        <div class="ocr-spinner">🔍</div>
+        <p class="muted">Recherche : « ${esc(data.title)} »…</p>
+      </div>`;
+  } else if (state === 'import-choose') {
+    modal.innerHTML = `
+      <div class="modal-head">
+        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Arrêter</button>
+        <strong>${data.index}/${data.total} · ${esc(data.title)}</strong>
+        <button class="btn-link" id="import-skip">Passer</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">Choisissez le bon film (ou « Passer ») :</p>
+        <div class="tmdb-results">
+          ${data.results.map(r => `
+            <button class="tmdb-result" data-id="${r.id}">
+              <div class="tmdb-poster" style="${r.poster ? `background-image:url('${r.poster}')` : ''}">${r.poster ? '' : '🎬'}</div>
+              <div class="tmdb-info">
+                <div class="tmdb-title">${esc(r.title)}</div>
+                <div class="tmdb-year">${r.year || '—'}</div>
+              </div>
+            </button>`).join('')}
+        </div>
+        <button class="btn-ghost" id="import-manual" style="margin-top:10px">Aucun ne correspond — saisir à la main</button>
+      </div>`;
+    $$('.tmdb-result', modal).forEach(b =>
+      b.addEventListener('click', () => pickImportResult(Number(b.dataset.id))));
+    $('#import-skip').addEventListener('click', skipImport);
+    $('#import-manual').addEventListener('click', () => pickImportResult(null));
+    $('#ocr-cancel').addEventListener('click', () => {
+      importQueue = []; closeOcrModal(); toast('Import arrêté'); go('library');
+    });
   } else if (state === 'progress') {
     modal.innerHTML = `
       <div class="modal-head">
@@ -1678,6 +1810,7 @@ function bindEvents() {
   $('#act-cancel').addEventListener('click', closeSheet);
   $('#act-manual').addEventListener('click', () => { closeSheet(); openEditor({}); });
   $('#act-photo').addEventListener('click', startPhotoFlow);
+  $('#act-import').addEventListener('click', startImportFlow);
   $('[data-action="add"]')?.addEventListener('click', openSheet);
 
   // Scanner
