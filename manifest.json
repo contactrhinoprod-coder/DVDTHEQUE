@@ -1,0 +1,27 @@
+{
+  "name": "DVDthèque — Ma Collection",
+  "short_name": "DVDthèque",
+  "description": "Gérez votre collection de DVD, Blu-ray et 4K. Scan code-barres, fiches détaillées, commentaires audio.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14181c",
+  "theme_color": "#14181c",
+  "lang": "fr",
+  "categories": ["entertainment", "lifestyle"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%2314181c'/%3E%3Ccircle cx='96' cy='96' r='52' fill='none' stroke='%23e50914' stroke-width='10'/%3E%3Ccircle cx='96' cy='96' r='14' fill='%23e50914'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='106' fill='%2314181c'/%3E%3Ccircle cx='256' cy='256' r='140' fill='none' stroke='%23e50914' stroke-width='26'/%3E%3Ccircle cx='256' cy='256' r='38' fill='%23e50914'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

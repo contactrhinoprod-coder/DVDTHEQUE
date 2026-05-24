@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#14181c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>DVDthèque — Ma Collection</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- ====================== APP SHELL ====================== -->
+  <div id="app">
+
+    <!-- Barre du haut, contextuelle par vue -->
+    <header id="topbar">
+      <button class="icon-btn" id="back-btn" hidden aria-label="Retour">&#8592;</button>
+      <h1 id="topbar-title">DVDthèque</h1>
+      <button class="icon-btn" id="search-toggle" aria-label="Rechercher">&#9906;</button>
+    </header>
+
+    <!-- Barre de recherche escamotable -->
+    <div id="searchbar" hidden>
+      <input type="search" id="search-input" placeholder="Rechercher un titre, réalisateur…" autocomplete="off" />
+    </div>
+
+    <!-- Conteneur des vues. Une seule .view est visible à la fois -->
+    <main id="views">
+
+      <!-- ---------- VUE : Bibliothèque ---------- -->
+      <section class="view" data-view="library">
+        <div class="toolbar">
+          <div class="seg" id="layout-seg">
+            <button data-layout="grid" class="active" aria-label="Grille">▦</button>
+            <button data-layout="list" aria-label="Liste">≣</button>
+          </div>
+          <select id="sort-select" class="select">
+            <option value="title">Tri : Titre A→Z</option>
+            <option value="title_desc">Tri : Titre Z→A</option>
+            <option value="year_desc">Tri : Année récente</option>
+            <option value="year">Tri : Année ancienne</option>
+            <option value="rating_desc">Tri : Mieux notés</option>
+            <option value="added_desc">Tri : Ajout récent</option>
+          </select>
+          <button class="select" id="filter-btn">Filtres</button>
+        </div>
+
+        <!-- Pastilles de filtre actif -->
+        <div id="active-filters" class="active-filters"></div>
+
+        <div id="library-grid" class="grid"></div>
+        <div id="library-empty" class="empty-state" hidden>
+          <div class="empty-icon">🎬</div>
+          <p>Votre collection est vide.</p>
+          <button class="btn-primary" data-action="add">Ajouter un film</button>
+        </div>
+      </section>
+
+      <!-- ---------- VUE : Détail film ---------- -->
+      <section class="view" data-view="detail" hidden>
+        <div id="detail-content"><!-- injecté --></div>
+      </section>
+
+      <!-- ---------- VUE : Aléatoire ---------- -->
+      <section class="view" data-view="random" hidden>
+        <div class="random-wrap">
+          <h2>Quel film ce soir ?</h2>
+          <div class="random-filters">
+            <select id="random-genre" class="select"><option value="">Tous genres</option></select>
+            <select id="random-rating" class="select">
+              <option value="0">Toute note</option>
+              <option value="3">★ 3+</option>
+              <option value="4">★ 4+</option>
+              <option value="5">★ 5</option>
+            </select>
+          </div>
+          <div id="random-reel" class="random-reel"><div class="reel-placeholder">🎲</div></div>
+          <button class="btn-primary" id="random-go">Tirer au sort</button>
+          <button class="btn-ghost" id="random-open" hidden>Voir la fiche</button>
+        </div>
+      </section>
+
+      <!-- ---------- VUE : Profil / réglages ---------- -->
+      <section class="view" data-view="profile" hidden>
+        <div class="profile-wrap">
+          <div class="profile-card">
+            <div class="avatar" id="profile-avatar">?</div>
+            <div>
+              <div id="profile-name" class="profile-name">Invité</div>
+              <div id="profile-meta" class="profile-meta">0 film dans la collection</div>
+            </div>
+          </div>
+          <div class="settings-list">
+            <button class="settings-row" id="set-import">Importer une collection (JSON)</button>
+            <button class="settings-row" id="set-export">Exporter ma collection (JSON)</button>
+            <button class="settings-row" id="set-theme">Thème : Sombre</button>
+            <button class="settings-row" id="set-api">Clé API film (TMDB / OMDb)</button>
+            <button class="settings-row" id="set-cloud">Sync cloud (Firebase)</button>
+            <button class="settings-row danger" id="set-wipe">Vider la collection</button>
+          </div>
+          <p class="muted small">DVDthèque — données stockées localement sur cet appareil.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Barre de navigation du bas -->
+    <nav id="tabbar">
+      <button class="tab active" data-go="library"><span>▦</span>Biblio</button>
+      <button class="tab" data-go="random"><span>🎲</span>Aléatoire</button>
+      <button class="tab" id="add-tab"><span class="add-plus">＋</span></button>
+      <button class="tab" data-go="profile"><span>☰</span>Profil</button>
+    </nav>
+
+  </div>
+
+  <!-- ====================== FEUILLE MODALE D'AJOUT ====================== -->
+  <div id="sheet-backdrop" class="backdrop" hidden></div>
+  <div id="add-sheet" class="sheet" hidden>
+    <div class="sheet-handle"></div>
+    <h3>Ajouter un film</h3>
+    <button class="big-action" id="act-scan"><span>📷</span> Scanner le code-barres</button>
+    <button class="big-action" id="act-photo"><span>🖼️</span> Photo de la jaquette (OCR)</button>
+    <button class="big-action" id="act-manual"><span>✏️</span> Saisie manuelle</button>
+    <button class="btn-ghost" id="act-cancel">Annuler</button>
+  </div>
+
+  <!-- ====================== MODALE SCANNER ====================== -->
+  <div id="scanner-modal" class="fullscreen-modal" hidden>
+    <video id="scanner-video" playsinline></video>
+    <div class="scanner-frame"></div>
+    <div class="scanner-hint" id="scanner-hint">Visez le code-barres au dos du boîtier</div>
+    <button class="icon-btn close-scan" id="scanner-close" aria-label="Fermer">✕</button>
+  </div>
+
+  <!-- ====================== MODALE ÉDITION / FICHE MANUELLE ====================== -->
+  <div id="edit-backdrop" class="backdrop" hidden></div>
+  <div id="edit-modal" class="modal" hidden>
+    <div class="modal-head">
+      <button class="btn-ghost" id="edit-cancel">Annuler</button>
+      <strong id="edit-title-h">Nouveau film</strong>
+      <button class="btn-link" id="edit-save">OK</button>
+    </div>
+    <div class="modal-body" id="edit-form"><!-- champs injectés --></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- Firebase SDK (compat) — même pattern qu'ALPHABRAVO -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
