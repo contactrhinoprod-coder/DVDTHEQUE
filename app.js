@@ -556,159 +556,6 @@ const AudioRecorder = (() => {
 })();
 
 /* ============================================================
-   5b. OCR — reconnaissance du titre sur jaquette (Tesseract.js)
-   Chargé à la demande depuis jsDelivr (v5, global "Tesseract").
-   Renvoie une liste de lignes candidates triées par taille de
-   texte (les plus grosses = plus probablement le titre).
-   L'utilisateur choisit/corrige avant la recherche TMDB.
-   ============================================================ */
-const OCR = (() => {
-  const TESS_VER = '5';
-  const TESS_SRC = `https://cdn.jsdelivr.net/npm/tesseract.js@${TESS_VER}/dist/tesseract.min.js`;
-  let worker = null;
-
-  function loadLib() {
-    if (window.Tesseract) return Promise.resolve();
-    return new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = TESS_SRC;
-      s.onload = res;
-      s.onerror = () => rej(new Error('Chargement Tesseract impossible (réseau ?)'));
-      document.head.appendChild(s);
-    });
-  }
-
-  /* Pré-traitement : charge l'image, l'agrandit si trop petite, passe en
-     niveaux de gris avec contraste accentué (seuil adaptatif simple).
-     C'est CE traitement qui améliore le plus la lecture d'un titre.
-     Renvoie un canvas prêt pour Tesseract. */
-  function preprocess(dataURL) {
-    return new Promise((res, rej) => {
-      const img = new Image();
-      img.onload = () => {
-        // Cible ~1600px de large pour que le texte soit assez gros
-        const targetW = 1600;
-        const scale = img.width < targetW ? targetW / img.width : 1;
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-
-        // Niveaux de gris + contraste + binarisation douce
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const d = imgData.data;
-        // 1er passage : moyenne de luminance pour le seuil
-        let sum = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-          sum += g;
-        }
-        const mean = sum / (d.length / 4);
-        // 2e passage : contraste fort autour de la moyenne
-        const contrast = 1.4;
-        for (let i = 0; i < d.length; i += 4) {
-          let g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-          g = (g - mean) * contrast + mean;       // étire le contraste
-          g = Math.max(0, Math.min(255, g));
-          d[i] = d[i+1] = d[i+2] = g;             // gris
-        }
-        ctx.putImageData(imgData, 0, 0);
-        res(canvas);
-      };
-      img.onerror = () => rej(new Error('Image illisible'));
-      img.src = dataURL;
-    });
-  }
-
-  // image = dataURL ; onProgress = callback(0..1)
-  // URL de la Cloud Function Google Vision (déployée par l'utilisateur)
-  const CLOUD_OCR_URL = 'https://europe-west1-dvdtheque-280da.cloudfunctions.net/ocr';
-
-  // OCR via Google Cloud Vision (bien meilleur que Tesseract).
-  // Renvoie le même format { candidates, rawText } ou lève une erreur.
-  async function recognizeCloud(dataURL, onProgress) {
-    if (onProgress) onProgress(0.3); // pas de vraie progression côté serveur
-    const r = await fetch(CLOUD_OCR_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: dataURL }),
-    });
-    if (onProgress) onProgress(0.9);
-    if (!r.ok) throw new Error('Cloud OCR HTTP ' + r.status);
-    const j = await r.json();
-    if (j.error) throw new Error(j.error);
-    const lines = (j.lines || []).filter(t =>
-      t.length >= 2 &&
-      !/^(dvd|blu-?ray|4k|uhd|tous droits|all rights|©|warner|universal|sony|paramount|fox|disney)/i.test(t)
-    );
-    if (onProgress) onProgress(1);
-    return { candidates: lines.slice(0, 8), rawText: j.fullText || '' };
-  }
-
-  async function recognize(dataURL, onProgress) {
-    // 1) On tente Google Cloud Vision (qualité nettement supérieure)
-    try {
-      const cloud = await recognizeCloud(dataURL, onProgress);
-      if (cloud.candidates.length) return cloud;
-      // Vision a répondu mais rien trouvé → on tente quand même Tesseract
-    } catch (e) {
-      console.warn('Cloud Vision indisponible, repli Tesseract:', e);
-    }
-
-    // 2) Repli : Tesseract local
-    await loadLib();
-    if (!worker) {
-      worker = await window.Tesseract.createWorker('fra+eng', 1, {
-        logger: (m) => {
-          if (m.status === 'recognizing text' && onProgress) onProgress(m.progress);
-        },
-      });
-    }
-    try {
-      await worker.setParameters({
-        tessedit_pageseg_mode: '6',
-        preserve_interword_spaces: '1',
-      });
-    } catch (e) { /* selon version */ }
-
-    const canvas = await preprocess(dataURL);
-    const { data } = await worker.recognize(canvas);
-    return extractCandidates(data);
-  }
-
-  // Trie les lignes par taille de texte (titre = gros) × confiance.
-  function extractCandidates(data) {
-    const lines = (data.lines || [])
-      .map(l => {
-        const bbox = l.bbox || {};
-        const h = (bbox.y1 || 0) - (bbox.y0 || 0);
-        const text = (l.text || '').replace(/\s+/g, ' ').trim();
-        return { text, h, conf: l.confidence || 0 };
-      })
-      .filter(l => l.text.length >= 2 && /[a-zA-ZÀ-ÿ0-9]/.test(l.text))
-      .filter(l => !/^(dvd|blu-?ray|4k|uhd|tous droits|all rights|©|warner|universal|sony|paramount|fox|disney)/i.test(l.text))
-      .filter(l => l.conf > 30); // ignore le texte trop incertain
-
-    lines.sort((a, b) => (b.h * (b.conf / 100 + 0.5)) - (a.h * (a.conf / 100 + 0.5)));
-    const seen = new Set(), out = [];
-    for (const l of lines) {
-      const k = l.text.toLowerCase();
-      if (seen.has(k)) continue;
-      seen.add(k); out.push(l.text);
-      if (out.length >= 6) break;
-    }
-    return { candidates: out, rawText: (data.text || '').trim() };
-  }
-
-  async function terminate() {
-    if (worker) { await worker.terminate(); worker = null; }
-  }
-
-  return { recognize, terminate };
-})();
-
 /* ============================================================
    6. UI / ROUTER / RENDU
    ============================================================ */
@@ -1231,7 +1078,13 @@ function openEditor(data, isEdit = false, onDone = null) {
     ${field('actors', 'Acteurs', m.actors)}
     ${field('duration', 'Durée (min)', m.duration, 'number')}
     ${field('price', "Prix d'achat (€)", m.price, 'number')}
-    ${field('poster', 'URL jaquette', m.poster)}
+    <div class="field">
+      <label>Jaquette</label>
+      <div class="poster-input-row">
+        <input id="f-poster" type="url" placeholder="URL de l'affiche" value="${esc(m.poster||'')}"/>
+        <button type="button" id="btn-photo-jacket" class="btn-photo-jacket" title="Prendre une photo">📷</button>
+      </div>
+    </div>
     <div id="poster-preview"></div>
     <div class="field"><label>Synopsis</label><textarea id="f-synopsis">${esc(m.synopsis||'')}</textarea></div>
     ${field('barcode', 'Code-barres', m.barcode)}
@@ -1239,6 +1092,23 @@ function openEditor(data, isEdit = false, onDone = null) {
   $('#edit-modal').hidden = false;
   $('#edit-backdrop').hidden = false;
   renderPosterPreview(m.poster);
+
+  // Bouton photo jaquette : prendre une photo ou choisir dans la galerie
+  $('#btn-photo-jacket').addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // caméra arrière par défaut sur mobile
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const dataURL = await fileToDataURL(file);
+      $('#f-poster').value = dataURL;
+      renderPosterPreview(dataURL);
+      toast('Photo ajoutée ✅');
+    };
+    input.click();
+  });
 
   // Recherche TMDB à partir du titre saisi → remplit tous les champs + jaquette.
   // Messages d'erreur affichés à l'écran (pas besoin de la console).
@@ -1471,13 +1341,8 @@ async function startScanFlow() {
       return;
     }
     // Sinon : code lu mais film non identifié (limite des bases EAN→DVD).
-    // On propose de photographier la jaquette pour l'OCR, sinon saisie manuelle.
-    if (confirm(`Code-barres lu (${ean}) mais film non identifié automatiquement.\n\nOK = photographier la jaquette pour reconnaissance.\nAnnuler = saisir le titre à la main.`)) {
-      pendingBarcode = ean;       // on gardera le code pour l'attacher au film
-      startPhotoFlow();
-    } else {
-      openEditor(film);           // fiche avec le code pré-rempli
-    }
+    // Film non identifié : ouvrir l'éditeur avec le code-barres pré-rempli
+    openEditor(film);
   });
 }
 
@@ -1485,23 +1350,6 @@ async function startScanFlow() {
 let pendingBarcode = '';
 
 /* ---- Flux d'ajout par photo de jaquette (OCR) ---- */
-function startPhotoFlow() {
-  closeSheet();
-  // input fichier avec capture caméra arrière sur mobile
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.capture = 'environment';
-  input.onchange = async () => {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    const dataURL = await fileToDataURL(file);
-    showOcrModal();
-    setOcrState('crop', { dataURL });   // étape de recadrage avant OCR
-  };
-  input.click();
-}
-
 function fileToDataURL(file) {
   return new Promise((res) => {
     const r = new FileReader();
@@ -1602,45 +1450,6 @@ function cropImage(dataURL, cropPct) {
   });
 }
 
-async function runOCR(dataURL) {
-  showOcrModal();
-  setOcrState('progress', { pct: 0 });
-  try {
-    const { candidates, rawText } = await OCR.recognize(dataURL, (p) => {
-      setOcrState('progress', { pct: Math.round(p * 100) });
-    });
-    if (!candidates.length) {
-      setOcrState('empty', { rawText });
-    } else {
-      setOcrState('choose', { candidates, dataURL });
-    }
-  } catch (e) {
-    toast(e.message || 'OCR échoué');
-    closeOcrModal();
-    openEditor({}); // repli saisie manuelle
-  }
-}
-
-/* Cherche le titre sur TMDB. Si plusieurs résultats, on les affiche
-   pour que l'utilisateur choisisse le bon (ex: Casino vs Casino Royale). */
-async function ocrSearchTitle(title) {
-  toast('Recherche TMDB : ' + title + '…');
-  const results = await MovieAPI.searchMulti(title);
-  if (!results.length) {
-    closeOcrModal();
-    const barcode = pendingBarcode; pendingBarcode = '';
-    toast('Aucun résultat TMDB — complétez à la main');
-    openEditor({ ...MovieAPI.blankFromBarcode(barcode, title) });
-    return;
-  }
-  // Un seul résultat : on prend direct. Plusieurs : on laisse choisir.
-  if (results.length === 1) {
-    pickTmdbResult(results[0].id);
-  } else {
-    setOcrState('results', { results });
-  }
-}
-
 /* L'utilisateur a choisi un film précis dans la liste TMDB */
 async function pickTmdbResult(id) {
   closeOcrModal();
@@ -1676,24 +1485,7 @@ function closeOcrModal() {
 function setOcrState(state, data = {}) {
   const modal = $('#ocr-modal');
   if (!modal) return;
-  if (state === 'crop') {
-    modal.innerHTML = `
-      <div class="modal-head">
-        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
-        <strong>Cadrez le titre</strong>
-        <button class="btn-link" id="crop-go">Analyser</button>
-      </div>
-      <div class="modal-body" style="padding:12px">
-        <p class="muted small">Déplacez et redimensionnez le cadre sur le <b>titre</b> du film, puis « Analyser ».</p>
-        <div id="crop-stage" style="position:relative;touch-action:none;user-select:none;margin-top:10px">
-          <img id="crop-img" src="${data.dataURL}" style="width:100%;display:block;border-radius:8px" />
-          <div id="crop-box" style="position:absolute;border:2px solid var(--accent);box-shadow:0 0 0 9999px rgba(0,0,0,.45);left:10%;top:35%;width:80%;height:18%;cursor:move"></div>
-        </div>
-        <button class="btn-ghost" id="crop-full" style="margin-top:12px">Analyser toute l'image</button>
-      </div>`;
-    setupCrop(data.dataURL);
-    $('#ocr-cancel').addEventListener('click', closeOcrModal);
-  } else if (state === 'import-input') {
+  if (state === 'import-input') {
     modal.innerHTML = `
       <div class="modal-head">
         <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
@@ -1748,91 +1540,6 @@ function setOcrState(state, data = {}) {
     $('#ocr-cancel').addEventListener('click', () => {
       importQueue = []; closeOcrModal(); toast('Import arrêté'); go('library');
     });
-  } else if (state === 'progress') {
-    modal.innerHTML = `
-      <div class="modal-head">
-        <span></span><strong>Lecture de la jaquette…</strong>
-        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
-      </div>
-      <div class="modal-body" style="text-align:center;padding-top:40px">
-        <div class="ocr-spinner">🔍</div>
-        <p class="muted">Analyse du texte… ${data.pct || 0}%</p>
-        <div class="ocr-bar"><div class="ocr-bar-fill" style="width:${data.pct||0}%"></div></div>
-        <p class="muted small" style="margin-top:20px">Le moteur OCR (~2 Mo) se charge au premier usage.</p>
-      </div>`;
-  } else if (state === 'results') {
-    modal.innerHTML = `
-      <div class="modal-head">
-        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
-        <strong>Quel film ?</strong>
-        <button class="btn-link" id="ocr-manual2">Manuel</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted small">Plusieurs films correspondent. Touchez le bon :</p>
-        <div class="tmdb-results">
-          ${data.results.map(r => `
-            <button class="tmdb-result" data-id="${r.id}">
-              <div class="tmdb-poster" style="${r.poster ? `background-image:url('${r.poster}')` : ''}">${r.poster ? '' : '🎬'}</div>
-              <div class="tmdb-info">
-                <div class="tmdb-title">${esc(r.title)}</div>
-                <div class="tmdb-year">${r.year || '—'}</div>
-              </div>
-            </button>`).join('')}
-        </div>
-      </div>`;
-    $$('.tmdb-result', modal).forEach(b =>
-      b.addEventListener('click', () => pickTmdbResult(Number(b.dataset.id))));
-    $('#ocr-manual2').addEventListener('click', () => { closeOcrModal(); openEditor({}); });
-  } else if (state === 'choose') {
-    modal.innerHTML = `
-      <div class="modal-head">
-        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
-        <strong>Quel est le titre ?</strong>
-        <button class="btn-link" id="ocr-manual2">Manuel</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted small">Texte détecté sur la jaquette. Touchez le titre du film :</p>
-        <div class="ocr-candidates">
-          ${data.candidates.map((c, i) =>
-            `<button class="ocr-cand" data-i="${i}">${esc(c)}</button>`).join('')}
-        </div>
-        <div class="field" style="margin-top:16px">
-          <label>Ou corrigez / saisissez le titre</label>
-          <input id="ocr-edit-title" type="text" placeholder="Titre du film" value="${esc(data.candidates[0] || '')}" />
-        </div>
-        <button class="btn-primary" id="ocr-search-btn">Rechercher ce film</button>
-      </div>`;
-    $$('.ocr-cand', modal).forEach(b =>
-      b.addEventListener('click', () => {
-        // Clic sur un candidat : on remplit le champ ET on lance la recherche
-        const t = data.candidates[+b.dataset.i];
-        const input = $('#ocr-edit-title'); if (input) input.value = t;
-        ocrSearchTitle(t);
-      }));
-    $('#ocr-search-btn').addEventListener('click', () => {
-      const v = $('#ocr-edit-title').value.trim();
-      if (v) ocrSearchTitle(v);
-    });
-    $('#ocr-manual2').addEventListener('click', () => { closeOcrModal(); openEditor({}); });
-  } else if (state === 'empty') {
-    modal.innerHTML = `
-      <div class="modal-head">
-        <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
-        <strong>Aucun titre lisible</strong><span></span>
-      </div>
-      <div class="modal-body">
-        <p class="muted">Le texte n'a pas pu être lu de façon fiable. Vous pouvez saisir le titre manuellement.</p>
-        <div class="field" style="margin-top:12px">
-          <input id="ocr-edit-title" type="text" placeholder="Titre du film" />
-        </div>
-        <button class="btn-primary" id="ocr-search-btn">Rechercher</button>
-        <button class="btn-ghost" id="ocr-manual2" style="margin-top:8px">Saisie complète manuelle</button>
-      </div>`;
-    $('#ocr-search-btn').addEventListener('click', () => {
-      const v = $('#ocr-edit-title').value.trim();
-      if (v) ocrSearchTitle(v);
-    });
-    $('#ocr-manual2').addEventListener('click', () => { closeOcrModal(); openEditor({}); });
   }
   const cancel = $('#ocr-cancel');
   if (cancel) cancel.addEventListener('click', closeOcrModal);
@@ -1840,65 +1547,6 @@ function setOcrState(state, data = {}) {
 
 /* Gère le cadre de recadrage (déplacement + redimensionnement tactile)
    et les boutons « Analyser » (zone) / « Analyser toute l'image ». */
-function setupCrop(dataURL) {
-  const stage = $('#crop-stage'), box = $('#crop-box');
-  if (!stage || !box) return;
-
-  let mode = null, startX = 0, startY = 0, orig = {};
-  const rect = () => stage.getBoundingClientRect();
-  const pct = (px, total) => Math.max(0, Math.min(1, px / total));
-
-  // Zone de redimensionnement : coin bas-droit (20px). Sinon déplacement.
-  function pointerDown(e) {
-    const t = e.touches ? e.touches[0] : e;
-    const b = box.getBoundingClientRect();
-    startX = t.clientX; startY = t.clientY;
-    orig = { left: box.offsetLeft, top: box.offsetTop, w: box.offsetWidth, h: box.offsetHeight };
-    const nearCorner = (t.clientX > b.right - 28) && (t.clientY > b.bottom - 28);
-    mode = nearCorner ? 'resize' : 'move';
-    e.preventDefault();
-  }
-  function pointerMove(e) {
-    if (!mode) return;
-    const t = e.touches ? e.touches[0] : e;
-    const r = rect();
-    const dx = t.clientX - startX, dy = t.clientY - startY;
-    if (mode === 'move') {
-      box.style.left = Math.max(0, Math.min(r.width - box.offsetWidth, orig.left + dx)) + 'px';
-      box.style.top  = Math.max(0, Math.min(r.height - box.offsetHeight, orig.top + dy)) + 'px';
-    } else {
-      box.style.width  = Math.max(40, Math.min(r.width - box.offsetLeft, orig.w + dx)) + 'px';
-      box.style.height = Math.max(30, Math.min(r.height - box.offsetTop, orig.h + dy)) + 'px';
-    }
-    e.preventDefault();
-  }
-  function pointerUp() { mode = null; }
-
-  box.addEventListener('mousedown', pointerDown);
-  box.addEventListener('touchstart', pointerDown, { passive: false });
-  window.addEventListener('mousemove', pointerMove);
-  window.addEventListener('touchmove', pointerMove, { passive: false });
-  window.addEventListener('mouseup', pointerUp);
-  window.addEventListener('touchend', pointerUp);
-
-  // Analyser la zone recadrée
-  $('#crop-go').addEventListener('click', async () => {
-    const r = rect();
-    const cropPct = {
-      x: pct(box.offsetLeft, r.width),
-      y: pct(box.offsetTop, r.height),
-      w: pct(box.offsetWidth, r.width),
-      h: pct(box.offsetHeight, r.height),
-    };
-    try {
-      const cropped = await cropImage(dataURL, cropPct);
-      runOCR(cropped);
-    } catch (e) { toast('Erreur recadrage'); runOCR(dataURL); }
-  });
-  // Analyser toute l'image
-  $('#crop-full').addEventListener('click', () => runOCR(dataURL));
-}
-
 /* ---- Filtres : catégories perso + genres ---- */
 function openFilters() {
   const genres = GENRES;
@@ -2658,7 +2306,6 @@ function bindEvents() {
   // Add sheet
   $('#sheet-backdrop').addEventListener('click', closeSheet);
   $('#act-cancel').addEventListener('click', closeSheet);
-  $('#act-photo').addEventListener('click', startPhotoFlow);
   $('#act-import').addEventListener('click', startImportFlow);
   $('[data-action="add"]')?.addEventListener('click', openSheet);
 
