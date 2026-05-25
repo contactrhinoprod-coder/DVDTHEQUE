@@ -748,6 +748,7 @@ function visibleMovies() {
     noAccent(m.director).includes(s) ||
     noAccent(m.actors).includes(s));
   if (f.genre)  list = list.filter(m => m.genre === f.genre);
+  if (f.tag)    list = list.filter(m => m.tag === f.tag);
   if (f.year)   list = list.filter(m => String(m.year) === String(f.year));
   if (f.format) list = list.filter(m => m.format === f.format);
   if (f.rating) list = list.filter(m => (m.rating || 0) >= f.rating);
@@ -792,6 +793,7 @@ function renderLibrary() {
       <div class="poster-wrap">
         <div class="poster" ${poster}>${m.poster ? '' : initial}</div>
         <span class="fmt-badge">${m.format || 'DVD'}</span>
+        ${m.tag === 'top3' ? '<span class="top3-badge">🏆 TOP 3</span>' : ''}
       </div>
       <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}${priceTxt ? ' <span class="price-inline">' + priceTxt + '</span>' : ''}</div>${m.rating ? `<div class="card-stars">${'★'.repeat(m.rating)}${'☆'.repeat(5-m.rating)}</div>` : ''}</div>
     </div>`;
@@ -848,6 +850,7 @@ function renderActiveFilters() {
   const box = $('#active-filters'); const f = State.filters;
   const chips = [];
   if (f.genre)  chips.push(['Genre', f.genre, 'genre']);
+  if (f.tag)    chips.push(['Catégorie', ({top3:'🏆 Top 3',nanard:'🤪 Nanard',navet:'💩 Navet'})[f.tag], 'tag']);
   if (f.year)   chips.push(['Année', f.year, 'year']);
   if (f.format) chips.push(['Format', f.format, 'format']);
   if (f.rating) chips.push(['Note', '★' + f.rating + '+', 'rating']);
@@ -899,6 +902,7 @@ function renderDetail(m) {
         <div><div class="lbl">Durée</div><div class="val">${fmtDuration(m.duration)}</div></div>
         <div><div class="lbl">Prix d'achat</div><div class="val">${m.price != null && m.price !== '' ? fmtPrice(m.price) : '—'}</div></div>
         <div><div class="lbl">Code-barres</div><div class="val">${m.barcode || '—'}</div></div>
+        ${m.tag ? `<div><div class="lbl">Catégorie</div><div class="val">${({top3:'🏆 Top 3',nanard:'🤪 Nanard',navet:'💩 Navet'})[m.tag] || '—'}</div></div>` : ''}
       </div>
     </div>
 
@@ -1217,6 +1221,12 @@ function openEditor(data, isEdit = false, onDone = null) {
       <option value="">—</option>
       ${GENRES.map(g => `<option ${m.genre===g?'selected':''}>${g}</option>`).join('')}
     </select></div>
+    <div class="field"><label>Catégorie perso</label><select id="f-tag">
+      <option value="" ${!m.tag ? 'selected' : ''}>— Aucune</option>
+      <option value="top3" ${m.tag==='top3' ? 'selected' : ''}>🏆 Top 3</option>
+      <option value="nanard" ${m.tag==='nanard' ? 'selected' : ''}>🤪 Nanard</option>
+      <option value="navet" ${m.tag==='navet' ? 'selected' : ''}>💩 Navet</option>
+    </select></div>
     ${field('director', 'Réalisateur', m.director)}
     ${field('actors', 'Acteurs', m.actors)}
     ${field('duration', 'Durée (min)', m.duration, 'number')}
@@ -1232,6 +1242,29 @@ function openEditor(data, isEdit = false, onDone = null) {
 
   // Recherche TMDB à partir du titre saisi → remplit tous les champs + jaquette.
   // Messages d'erreur affichés à l'écran (pas besoin de la console).
+  // Remplit les champs de l'éditeur à partir d'un id TMDB
+  async function fillFromTmdbId(id, fallbackTitle) {
+    const key = State.settings.apiKey;
+    const dr = await fetch(`https://api.themoviedb.org/3/movie/${id}?language=fr-FR&append_to_response=credits&api_key=${key}`);
+    const d = await dr.json();
+    const director = (d.credits?.crew || []).find(c => c.job === 'Director');
+    const cast = (d.credits?.cast || []).slice(0, 5).map(c => c.name).join(', ');
+    $('#f-title').value         = d.title || fallbackTitle;
+    $('#f-originalTitle').value = d.original_title || '';
+    $('#f-year').value          = (d.release_date || '').slice(0, 4);
+    $('#f-director').value      = director ? director.name : '';
+    $('#f-actors').value        = cast;
+    $('#f-duration').value      = d.runtime || '';
+    $('#f-poster').value        = d.poster_path ? `https://image.tmdb.org/t/p/w500${d.poster_path}` : '';
+    $('#f-synopsis').value      = d.overview || '';
+    if (d.genres && d.genres[0]) {
+      const opt = [...$('#f-genre').options].find(o => o.value.toLowerCase() === d.genres[0].name.toLowerCase());
+      if (opt) $('#f-genre').value = opt.value;
+    }
+    renderPosterPreview($('#f-poster').value);
+    toast('Champs remplis ✅');
+  }
+
   $('#tmdb-fill').onclick = async () => {
     const title = $('#f-title').value.trim();
     if (!title) { toast('Saisis d’abord un titre'); return; }
@@ -1242,26 +1275,14 @@ function openEditor(data, isEdit = false, onDone = null) {
       const r = await fetch(url);
       if (!r.ok) { alert('TMDB erreur HTTP ' + r.status + ' (clé invalide ?)'); return; }
       const j = await r.json();
-      if (!j.results || !j.results.length) { alert('Aucun film trouvé pour « ' + title +' ».'); return; }
-      const id = j.results[0].id;
-      const dr = await fetch(`https://api.themoviedb.org/3/movie/${id}?language=fr-FR&append_to_response=credits&api_key=${key}`);
-      const d = await dr.json();
-      const director = (d.credits?.crew || []).find(c => c.job === 'Director');
-      const cast = (d.credits?.cast || []).slice(0, 5).map(c => c.name).join(', ');
-      $('#f-title').value         = d.title || title;
-      $('#f-originalTitle').value = d.original_title || '';
-      $('#f-year').value          = (d.release_date || '').slice(0, 4);
-      $('#f-director').value      = director ? director.name : '';
-      $('#f-actors').value        = cast;
-      $('#f-duration').value      = d.runtime || '';
-      $('#f-poster').value        = d.poster_path ? `https://image.tmdb.org/t/p/w500${d.poster_path}` : '';
-      $('#f-synopsis').value      = d.overview || '';
-      if (d.genres && d.genres[0]) {
-        const opt = [...$('#f-genre').options].find(o => o.value.toLowerCase() === d.genres[0].name.toLowerCase());
-        if (opt) $('#f-genre').value = opt.value;
+      const results = (j.results || []).slice(0, 8);
+      if (!results.length) { alert('Aucun film trouvé pour « ' + title +' ».'); return; }
+      if (results.length === 1) {
+        await fillFromTmdbId(results[0].id, title);
+      } else {
+        // Plusieurs résultats -> on laisse choisir
+        showTmdbPicker(results, (id) => fillFromTmdbId(id, title));
       }
-      renderPosterPreview($('#f-poster').value);
-      toast('Champs remplis ✅');
     } catch (e) {
       alert('Erreur réseau TMDB : ' + (e.message || e));
     }
@@ -1281,6 +1302,16 @@ function openEditor(data, isEdit = false, onDone = null) {
     m.barcode       = $('#f-barcode').value.trim();
     const pv = $('#f-price').value.trim();
     m.price = pv === '' ? null : (parseFloat(pv.replace(',', '.')) || null);
+    // Catégorie perso (étiquette unique) avec limite de 3 pour le Top 3
+    const newTag = $('#f-tag').value;
+    if (newTag === 'top3' && m.tag !== 'top3') {
+      const top3Count = State.movies.filter(x => x.id !== m.id && x.tag === 'top3').length;
+      if (top3Count >= 3) {
+        alert('Votre Top 3 est déjà complet (3 films). Retirez-en un d\'abord pour ajouter celui-ci.');
+        return; // on bloque l'enregistrement, l'utilisateur ajuste
+      }
+    }
+    m.tag = newTag;
     m.wishlist      = $('#f-dest').value === 'wishlist'; // destination choisie
 
     // Détection de doublon : même titre + même format, DANS LA MÊME collection
@@ -1324,6 +1355,47 @@ function field(key, label, val, type = 'text') {
     <input id="f-${key}" type="${type}" value="${esc(val ?? '')}" /></div>`;
 }
 function closeEditor() { $('#edit-modal').hidden = true; $('#edit-backdrop').hidden = true; }
+
+/* Mini-sélecteur de résultats TMDB (par-dessus l'éditeur).
+   results = [{id, title, release_date, poster_path}], onPick(id) */
+function showTmdbPicker(results, onPick) {
+  let modal = $('#tmdb-picker');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'tmdb-picker';
+    modal.className = 'modal';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div class="modal-head">
+      <button class="btn-ghost" id="tmdb-pick-cancel" style="width:auto">Annuler</button>
+      <strong>Quel film ?</strong><span></span>
+    </div>
+    <div class="modal-body">
+      <p class="muted small">Plusieurs films correspondent. Touchez le bon :</p>
+      <div class="tmdb-results">
+        ${results.map(r => {
+          const year = (r.release_date || '').slice(0, 4);
+          const poster = r.poster_path ? `https://image.tmdb.org/t/p/w185${r.poster_path}` : '';
+          return `<button class="tmdb-result" data-id="${r.id}">
+            <div class="tmdb-poster" style="${poster ? `background-image:url('${poster}')` : ''}">${poster ? '' : '🎬'}</div>
+            <div class="tmdb-info">
+              <div class="tmdb-title">${esc(r.title || '')}</div>
+              <div class="tmdb-year">${year || '—'}</div>
+            </div>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+  modal.hidden = false;
+  $('#edit-backdrop').hidden = false;
+  const close = () => { modal.hidden = true; if ($('#edit-modal').hidden) $('#edit-backdrop').hidden = true; };
+  $$('.tmdb-result', modal).forEach(b => b.addEventListener('click', () => {
+    close();
+    onPick(Number(b.dataset.id));
+  }));
+  $('#tmdb-pick-cancel').addEventListener('click', close);
+}
 
 /* Aperçu de la jaquette dans l'éditeur */
 function renderPosterPreview(url) {
@@ -1827,19 +1899,31 @@ function setupCrop(dataURL) {
   $('#crop-full').addEventListener('click', () => runOCR(dataURL));
 }
 
-/* ---- Filtres (prompt simple, pas de lib) ---- */
+/* ---- Filtres : catégories perso + genres ---- */
 function openFilters() {
-  // Tous les genres possibles (mêmes que ceux proposés à la création d'une fiche)
   const genres = GENRES;
+  const cats = [
+    { v: 'top3', label: '🏆 Top 3' },
+    { v: 'nanard', label: '🤪 Nanards' },
+    { v: 'navet', label: '💩 Navets' },
+  ];
 
   showOcrModal();
   const modal = $('#ocr-modal');
   modal.innerHTML = `
     <div class="modal-head">
       <button class="btn-ghost" id="ocr-cancel" style="width:auto">Fermer</button>
-      <strong>Filtrer par genre</strong><span></span>
+      <strong>Filtrer</strong><span></span>
     </div>
     <div class="modal-body">
+      <p class="muted small" style="margin-bottom:6px">Catégories</p>
+      <div class="genre-list">
+        <button class="genre-item ${!State.filters.tag ? 'active' : ''}" data-tag="">Toutes</button>
+        ${cats.map(c => `
+          <button class="genre-item ${State.filters.tag === c.v ? 'active' : ''}" data-tag="${c.v}">${c.label}</button>
+        `).join('')}
+      </div>
+      <p class="muted small" style="margin:16px 0 6px">Genre</p>
       <div class="genre-list">
         <button class="genre-item ${!State.filters.genre ? 'active' : ''}" data-g="">Tous les genres</button>
         ${genres.map(g => `
@@ -1847,9 +1931,15 @@ function openFilters() {
         `).join('')}
       </div>
     </div>`;
-  $$('.genre-item', modal).forEach(b => b.addEventListener('click', () => {
+  $$('.genre-item[data-g]', modal).forEach(b => b.addEventListener('click', () => {
     const g = b.dataset.g;
     if (g) State.filters.genre = g; else delete State.filters.genre;
+    closeOcrModal();
+    renderLibrary();
+  }));
+  $$('.genre-item[data-tag]', modal).forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.tag;
+    if (t) State.filters.tag = t; else delete State.filters.tag;
     closeOcrModal();
     renderLibrary();
   }));

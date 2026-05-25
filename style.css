@@ -509,3 +509,12 @@ html, body {
 
 /* Le sélecteur TMDB passe au-dessus de l'éditeur */
 #tmdb-picker { z-index: 60; }
+
+/* Badge Top 3 sur la vignette (en haut à gauche) */
+.top3-badge {
+  position: absolute; top: 6px; left: 6px;
+  background: linear-gradient(135deg, #f5b301, #e08e00);
+  color: #1a1a1a; font-size: .62rem; font-weight: 800;
+  padding: 3px 7px; border-radius: 20px; letter-spacing: .3px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.4);
+}
