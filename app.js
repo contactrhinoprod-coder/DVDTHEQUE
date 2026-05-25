@@ -1489,10 +1489,10 @@ function setOcrState(state, data = {}) {
     modal.innerHTML = `
       <div class="modal-head">
         <button class="btn-ghost" id="ocr-cancel" style="width:auto">Annuler</button>
-        <strong>Importer une liste</strong><span></span>
+        <strong>Nouveau film</strong><span></span>
       </div>
       <div class="modal-body">
-        <p class="muted small">Collez votre liste de films, <b>un titre par ligne</b>. Vous validerez chaque film un par un.</p>
+        <p class="muted small">Entrez le titre du film, ou une liste — <b>un titre par ligne</b>.<br>Vous validerez la fiche de chaque film un par un à l'étape suivante.</p>
         <div class="field" style="margin-top:12px">
           <textarea id="import-textarea" rows="10" placeholder="Casino&#10;Le Parrain&#10;Heat&#10;Pulp Fiction&#10;…"></textarea>
         </div>
