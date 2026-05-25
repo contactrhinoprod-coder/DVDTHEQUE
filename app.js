@@ -736,15 +736,17 @@ function go(view, opts = {}) {
 /* ---- Filtre + tri appliqués à la collection ---- */
 function visibleMovies() {
   let list = State.movies.filter(m => !m.wishlist); // biblio = hors wishlist
-  const f = State.filters, s = State.search.toLowerCase().trim();
+  const f = State.filters;
+  const noAccent = (str) => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const s = noAccent(State.search.trim());
 
   // Filtre maître par format (Tout / DVD / Blu-ray / 4K)
   if (State.formatFilter) list = list.filter(m => (m.format || 'DVD') === State.formatFilter);
 
   if (s) list = list.filter(m =>
-    (m.title || '').toLowerCase().includes(s) ||
-    (m.director || '').toLowerCase().includes(s) ||
-    (m.actors || '').toLowerCase().includes(s));
+    noAccent(m.title).includes(s) ||
+    noAccent(m.director).includes(s) ||
+    noAccent(m.actors).includes(s));
   if (f.genre)  list = list.filter(m => m.genre === f.genre);
   if (f.year)   list = list.filter(m => String(m.year) === String(f.year));
   if (f.format) list = list.filter(m => m.format === f.format);
@@ -791,7 +793,7 @@ function renderLibrary() {
         <div class="poster" ${poster}>${m.poster ? '' : initial}</div>
         <span class="fmt-badge">${m.format || 'DVD'}</span>
       </div>
-      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}${priceTxt ? ' <span class="price-inline">' + priceTxt + '</span>' : ''}</div></div>
+      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}${priceTxt ? ' <span class="price-inline">' + priceTxt + '</span>' : ''}</div>${m.rating ? `<div class="card-stars">${'★'.repeat(m.rating)}${'☆'.repeat(5-m.rating)}</div>` : ''}</div>
     </div>`;
   }).join('');
 
@@ -925,7 +927,10 @@ function renderDetail(m) {
 
   // Note
   $$('#rating-edit span').forEach(s => s.addEventListener('click', async () => {
-    m.rating = +s.dataset.v; await Store.putMovie(m);
+    const v = +s.dataset.v;
+    // Re-cliquer sur la note actuelle l'efface (toggle)
+    m.rating = (m.rating === v) ? 0 : v;
+    await Store.putMovie(m);
     if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
     renderDetail(m);
   }));
@@ -1092,6 +1097,99 @@ function renderProfile() {
     avatarEl.textContent = '?';
     if (cloudBtn) cloudBtn.textContent = 'Se connecter avec Google';
   }
+
+  renderProfileStats();
+}
+
+/* Petites phrases rigolotes selon le genre dominant */
+const GENRE_QUIPS = {
+  'Action': "Alors, on s'est ramolli ? 💥",
+  'Horreur': "BOUUUH ! Même pas peur 👻",
+  'Comédie': "Toujours le mot pour rire 😄",
+  'Drame': "Sors les mouchoirs 😢",
+  'Science-Fiction': "Direction les étoiles 🚀",
+  'Thriller': "Toujours sur les nerfs 🔪",
+  'Romance': "Cœur d'artichaut, va 💕",
+  'Animation': "Resté un grand enfant 🎨",
+  'Aventure': "L'âme d'un explorateur 🗺️",
+  'Documentaire': "La culture, c'est ton truc 🎓",
+  'Fantastique': "La tête dans les nuages 🐉",
+  'Guerre': "Au rapport, soldat ! 🎖️",
+  'Western': "Y'a un nouveau shérif en ville 🤠",
+  'Crime': "Un vrai esprit de détective 🕵️",
+  'Histoire': "Passionné du passé 📜",
+  'Musique': "La vie en chansons 🎵",
+  'Mystère': "Toujours à fouiner 🔎",
+};
+
+/* Couleurs du camembert (réutilisées dans l'ordre) */
+const PIE_COLORS = ['#e50914','#f5b301','#1f7a3d','#2563eb','#9333ea','#db2777','#0891b2','#ea580c','#65a30d','#7c3aed','#0d9488','#c026d3','#dc2626','#ca8a04','#16a34a','#4f46e5','#be123c'];
+
+function renderProfileStats() {
+  const box = $('#profile-stats');
+  if (!box) return;
+  const films = State.movies.filter(m => !m.wishlist);
+  const nb = films.length;
+  // Total heures de visionnage
+  const totalMin = films.reduce((s, m) => s + (Number(m.duration) || 0), 0);
+  const h = Math.floor(totalMin / 60), min = totalMin % 60;
+  const dureeStr = totalMin ? `${h}h${String(min).padStart(2, '0')}` : '—';
+
+  // Répartition par genre
+  const byGenre = {};
+  films.forEach(m => { const g = m.genre || 'Autre'; byGenre[g] = (byGenre[g] || 0) + 1; });
+  const entries = Object.entries(byGenre).sort((a, b) => b[1] - a[1]);
+
+  if (!nb) {
+    box.innerHTML = `<div class="stat-row"><div class="stat-cell"><div class="stat-num">0</div><div class="stat-lbl">film</div></div></div>`;
+    return;
+  }
+
+  // Genre dominant + quip
+  const topGenre = entries[0][0];
+  const quip = GENRE_QUIPS[topGenre] || `Fan de ${topGenre} 🎬`;
+
+  // Camembert SVG (donut) avec segments
+  const total = nb;
+  const cx = 80, cy = 80, r = 70, rin = 38;
+  let acc = 0;
+  const segs = entries.map(([g, count], i) => {
+    const frac = count / total;
+    const start = acc * 2 * Math.PI - Math.PI / 2;
+    acc += frac;
+    const end = acc * 2 * Math.PI - Math.PI / 2;
+    const large = frac > 0.5 ? 1 : 0;
+    const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
+    const x2 = cx + r * Math.cos(end),   y2 = cy + r * Math.sin(end);
+    const color = PIE_COLORS[i % PIE_COLORS.length];
+    const path = `M ${cx} ${cy} L ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z`;
+    // Position du compteur au milieu du segment
+    const mid = (start + end) / 2;
+    const lr = (r + rin) / 2 + 6;
+    const lx = cx + lr * Math.cos(mid), ly = cy + lr * Math.sin(mid);
+    return { path, color, count, g, lx, ly };
+  });
+
+  box.innerHTML = `
+    <div class="stat-row">
+      <div class="stat-cell"><div class="stat-num">${nb}</div><div class="stat-lbl">film${nb>1?'s':''}</div></div>
+      <div class="stat-cell"><div class="stat-num">${dureeStr}</div><div class="stat-lbl">de visionnage</div></div>
+    </div>
+    <div class="genre-quip">${quip}</div>
+    <div class="pie-wrap">
+      <svg viewBox="0 0 160 160" class="pie-svg">
+        ${segs.map(s => `<path d="${s.path}" fill="${s.color}" stroke="var(--bg)" stroke-width="1.5"/>`).join('')}
+        <circle cx="${cx}" cy="${cy}" r="${rin}" fill="var(--bg)"/>
+        ${segs.filter(s => s.count / total > 0.06).map(s =>
+          `<text x="${s.lx.toFixed(1)}" y="${s.ly.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="700" fill="#fff">${s.count}</text>`).join('')}
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="15" font-weight="800" fill="var(--text)">${nb}</text>
+        <text x="${cx}" y="${cy+11}" text-anchor="middle" font-size="8" fill="var(--text-dim)">films</text>
+      </svg>
+      <div class="pie-legend">
+        ${entries.map(([g, count], i) =>
+          `<div class="legend-item"><span class="legend-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>${esc(g)} <b>${count}</b></div>`).join('')}
+      </div>
+    </div>`;
 }
 
 /* ---- Éditeur de fiche (ajout/modif manuels) ---- */
@@ -1846,51 +1944,84 @@ async function exportPDF(mode = 'library', withPrice = false) {
   pdf.text(`Généré le ${dateStr}`, margin, margin + 15);
   pdf.setTextColor(0);
 
-  let col = 0, row = 0;
+  // Position courante en Y absolue (gère en-têtes de genre + grille)
   const startY = margin + headerH;
+  let curY = startY;   // haut de la rangée courante
+  let col = 0;
 
-  for (let i = 0; i < movies.length; i++) {
-    const m = movies[i];
-    const x = margin + col * (cellW + gap);
-    const y = startY + row * (cellH + gap);
-
-    // Affiche (ou cadre avec initiale si absente)
+  // Dessine une vignette à la position (x, curY)
+  async function drawCell(m, x) {
+    const y = curY;
     const img = await imageToDataURL(m.poster);
     if (img) {
       try { pdf.addImage(img, 'JPEG', x, y, cellW, posterH); }
-      catch (e) {
-        pdf.setDrawColor(200); pdf.rect(x, y, cellW, posterH);
-      }
+      catch (e) { pdf.setDrawColor(200); pdf.rect(x, y, cellW, posterH); }
     } else {
       pdf.setFillColor(235); pdf.rect(x, y, cellW, posterH, 'F');
       pdf.setFontSize(22); pdf.setTextColor(150);
       pdf.text((m.title || '?').charAt(0).toUpperCase(), x + cellW / 2, y + posterH / 2, { align: 'center', baseline: 'middle' });
       pdf.setTextColor(0);
     }
-
-    // Texte sous l'affiche
-    let ty = y + posterH + 4;
-    pdf.setFontSize(8.5); pdf.setTextColor(0);
+    // Titre sous l'affiche — plus gros et gras
+    let ty = y + posterH + 5;
+    pdf.setFont(undefined, 'bold'); pdf.setFontSize(10); pdf.setTextColor(0);
     const title = pdf.splitTextToSize(m.title || 'Sans titre', cellW);
-    pdf.text(title.slice(0, 2), x, ty); // max 2 lignes de titre
-    ty += title.length > 1 ? 7 : 4;
-    pdf.setFontSize(7); pdf.setTextColor(90);
-    const meta = [m.director, m.year, m.genre, m.format].filter(Boolean).join(' · ');
+    pdf.text(title.slice(0, 2), x, ty);
+    ty += title.length > 1 ? 8 : 5;
+    // Meta
+    pdf.setFont(undefined, 'normal'); pdf.setFontSize(7); pdf.setTextColor(90);
+    const meta = [m.director, m.year, m.format].filter(Boolean).join(' · ');
     const metaLines = pdf.splitTextToSize(meta, cellW);
     pdf.text(metaLines.slice(0, 2), x, ty);
-    // Prix sous la meta (si demandé et renseigné)
     if (withPrice && m.price != null && m.price !== '') {
       ty += (metaLines.length > 1 ? 6 : 3.5);
       pdf.setFontSize(8); pdf.setTextColor(0);
       pdf.text(fmtPrice(m.price), x, ty);
     }
     pdf.setTextColor(0);
+  }
 
-    // Avance dans la grille
-    col++;
-    if (col >= cols) { col = 0; row++; }
-    if (row >= rowsPerPage && i < movies.length - 1) {
-      pdf.addPage(); row = 0; col = 0;
+  // Saut de ligne dans la grille
+  function nextRow() { col = 0; curY += cellH + gap; }
+  function ensureSpace(needed) {
+    if (curY + needed > pageH - margin) { pdf.addPage(); curY = margin + 6; col = 0; }
+  }
+
+  if (isWish) {
+    // Wishlist : pas de groupement, grille simple
+    for (const m of movies) {
+      if (col === 0) ensureSpace(cellH);
+      await drawCell(m, margin + col * (cellW + gap));
+      col++;
+      if (col >= cols) nextRow();
+    }
+  } else {
+    // Collection : groupé par genre, en-tête par genre
+    const byGenre = {};
+    movies.forEach(m => {
+      const g = m.genre || 'Sans genre';
+      (byGenre[g] = byGenre[g] || []).push(m);
+    });
+    const genresSorted = Object.keys(byGenre).sort((a, b) => a.localeCompare(b));
+    for (const g of genresSorted) {
+      // En-tête de genre
+      if (col !== 0) nextRow();            // termine la rangée en cours
+      ensureSpace(12 + cellH);             // place pour l'en-tête + au moins une rangée
+      curY += 4;
+      pdf.setFont(undefined, 'bold'); pdf.setFontSize(13); pdf.setTextColor(0);
+      pdf.text(`${g}  (${byGenre[g].length})`, margin, curY);
+      pdf.setFont(undefined, 'normal');
+      pdf.setDrawColor(200); pdf.line(margin, curY + 2, pageW - margin, curY + 2);
+      curY += 8;
+      col = 0;
+      // Films du genre
+      for (const m of byGenre[g]) {
+        if (col === 0) ensureSpace(cellH);
+        await drawCell(m, margin + col * (cellW + gap));
+        col++;
+        if (col >= cols) nextRow();
+      }
+      if (col !== 0) nextRow(); // termine la rangée avant le genre suivant
     }
   }
 
@@ -1899,12 +2030,11 @@ async function exportPDF(mode = 'library', withPrice = false) {
     const withP = movies.filter(m => m.price != null && m.price !== '');
     if (withP.length) {
       const total = withP.reduce((s, m) => s + Number(m.price), 0);
-      // Position sous la dernière rangée utilisée
-      let totalY = startY + (col === 0 ? row : row + 1) * (cellH + gap) + 4;
+      let totalY = curY + 4;
       if (totalY > pageH - margin - 10) { pdf.addPage(); totalY = margin + 10; }
-      pdf.setFontSize(12); pdf.setTextColor(0);
+      pdf.setFont(undefined, 'bold'); pdf.setFontSize(12); pdf.setTextColor(0);
       pdf.text(`Valeur totale de la collection : ${fmtPrice(total)}`, margin, totalY);
-      pdf.setFontSize(8); pdf.setTextColor(120);
+      pdf.setFont(undefined, 'normal'); pdf.setFontSize(8); pdf.setTextColor(120);
       pdf.text(`(${withP.length} film(s) avec prix sur ${movies.length})`, margin, totalY + 5);
       pdf.setTextColor(0);
     }
@@ -2438,7 +2568,6 @@ function bindEvents() {
   // Add sheet
   $('#sheet-backdrop').addEventListener('click', closeSheet);
   $('#act-cancel').addEventListener('click', closeSheet);
-  $('#act-manual').addEventListener('click', () => { closeSheet(); openEditor({}); });
   $('#act-photo').addEventListener('click', startPhotoFlow);
   $('#act-import').addEventListener('click', startImportFlow);
   $('[data-action="add"]')?.addEventListener('click', openSheet);

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>DVDthèque — Ma Collection</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./style.css?v=26" />
+  <link rel="stylesheet" href="./style.css?v=28" />
 </head>
 <body>
   <!-- ====================== ÉCRAN DE CONNEXION ====================== -->
@@ -36,7 +36,7 @@
 
     <!-- Barre de recherche escamotable -->
     <div id="searchbar" hidden>
-      <input type="search" id="search-input" placeholder="Rechercher un titre, réalisateur…" autocomplete="off" />
+      <input type="search" id="search-input" placeholder="Titre, réalisateur ou acteur…" autocomplete="off" />
     </div>
 
     <!-- Conteneur des vues. Une seule .view est visible à la fois -->
@@ -127,6 +127,10 @@
               <div id="profile-meta" class="profile-meta">0 film dans la collection</div>
             </div>
           </div>
+
+          <!-- Stats utilisateur (moitié haute) -->
+          <div id="profile-stats" class="profile-stats"></div>
+
           <div class="settings-list">
             <button class="settings-row" id="set-pdf">Exporter ma collection en PDF</button>
             <button class="settings-row" id="set-pdf-wish">Exporter ma wishlist en PDF</button>
@@ -158,8 +162,7 @@
     <div class="sheet-handle"></div>
     <h3>Ajouter un film</h3>
     <button class="big-action" id="act-photo"><span>🖼️</span> Photo de la jaquette (OCR)</button>
-    <button class="big-action" id="act-import"><span>📋</span> Importer une liste de titres</button>
-    <button class="big-action" id="act-manual"><span>✏️</span> Saisie manuelle</button>
+    <button class="big-action" id="act-import"><span>📋</span> Nouveau film ou liste</button>
     <button class="btn-ghost" id="act-cancel">Annuler</button>
   </div>
 
@@ -189,6 +192,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="./app.js?v=26"></script>
+  <script src="./app.js?v=28"></script>
 </body>
 </html>
