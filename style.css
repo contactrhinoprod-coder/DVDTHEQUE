@@ -483,3 +483,26 @@ html, body {
 
 /* Affiche zoomée pour le quiz (on ne voit qu'un détail) */
 .quiz-image.zoomed { width: 200px; height: 200px; aspect-ratio: auto; border-radius: 12px; }
+
+/* Note (étoiles) sur la vignette biblio */
+.card-stars { font-size: .8rem; color: #f5b301; margin-top: 2px; }
+
+/* ====================== PROFIL : STATS ====================== */
+.profile-stats { margin: 16px 0 20px; }
+.stat-lines { margin-bottom: 14px; }
+.stat-line { font-size: 1rem; color: var(--text-dim); line-height: 1.7; }
+.stat-line .stat-n { font-size: 1.3rem; font-weight: 800; color: var(--accent); margin-right: 4px; }
+.genre-quip {
+  text-align: center; font-size: 1.05rem; font-weight: 700;
+  margin: 4px 0 18px; padding: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+}
+.pie-wrap {
+  display: flex; align-items: center; gap: 14px; flex-wrap: nowrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+}
+.pie-svg { width: 150px; height: 150px; flex: none; }
+.pie-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.legend-item { font-size: .85rem; display: flex; align-items: center; gap: 8px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.legend-item b { margin-left: auto; }

@@ -1171,9 +1171,9 @@ function renderProfileStats() {
   });
 
   box.innerHTML = `
-    <div class="stat-row">
-      <div class="stat-cell"><div class="stat-num">${nb}</div><div class="stat-lbl">film${nb>1?'s':''}</div></div>
-      <div class="stat-cell"><div class="stat-num">${dureeStr}</div><div class="stat-lbl">de visionnage</div></div>
+    <div class="stat-lines">
+      <div class="stat-line"><span class="stat-n">${nb}</span> film${nb>1?'s':''}</div>
+      <div class="stat-line"><span class="stat-n">${dureeStr}</span> de visionnage</div>
     </div>
     <div class="genre-quip">${quip}</div>
     <div class="pie-wrap">
