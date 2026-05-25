@@ -2274,7 +2274,7 @@ async function cloudSignOut() {
 function bindEvents() {
   // Tabs
   $$('.tab[data-go]').forEach(t => t.addEventListener('click', () => go(t.dataset.go)));
-  $('#add-tab').addEventListener('click', openSheet);
+  $('#add-tab').addEventListener('click', startImportFlow);
 
   // Topbar
   $('#back-btn').addEventListener('click', () => {
@@ -2307,7 +2307,7 @@ function bindEvents() {
   $('#sheet-backdrop').addEventListener('click', closeSheet);
   $('#act-cancel').addEventListener('click', closeSheet);
   $('#act-import').addEventListener('click', startImportFlow);
-  $('[data-action="add"]')?.addEventListener('click', openSheet);
+  $('[data-action="add"]')?.addEventListener('click', startImportFlow);
 
   // Scanner
   $('#scanner-close').addEventListener('click', () => Scanner.stop());
