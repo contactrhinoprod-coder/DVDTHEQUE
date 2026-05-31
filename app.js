@@ -322,64 +322,36 @@ const Cloud = (() => {
   }
 
   // Détecte si on tourne dans Capacitor (app native iOS/Android)
-  function isNative() {
-    return window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-  }
-
-  // Connexion Google — plugin natif dans Capacitor, popup web sinon
+  // Connexion Google (web popup — overridé en natif par native-share.js)
   async function signInGoogle() {
     if (!auth) return;
-    if (isNative()) {
-      // Plugin @capacitor-firebase/authentication
-      const { FirebaseAuthentication } = await import('https://esm.sh/@capacitor-firebase/authentication@8.2.0');
-      const result = await FirebaseAuthentication.signInWithGoogle();
-      const credential = firebase.auth.GoogleAuthProvider.credential(
-        result.credential?.idToken
-      );
-      await auth.signInWithCredential(credential);
-    } else {
-      // Web : popup avec repli redirect
-      const provider = new firebase.auth.GoogleAuthProvider();
-      try {
-        await auth.signInWithPopup(provider);
-      } catch (e) {
-        const c = e && e.code || '';
-        if (c.includes('popup') || c.includes('cancelled') || c.includes('blocked') ||
-            c === 'auth/operation-not-supported-in-this-environment') {
-          await auth.signInWithRedirect(provider);
-        } else throw e;
-      }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try { await auth.signInWithPopup(provider); }
+    catch (e) {
+      const c = e && e.code || '';
+      if (c.includes('popup') || c.includes('cancelled') || c.includes('blocked') ||
+          c === 'auth/operation-not-supported-in-this-environment') {
+        await auth.signInWithRedirect(provider);
+      } else throw e;
     }
   }
 
-  // Connexion Apple — plugin natif dans Capacitor, popup web sinon
+  // Connexion Apple (web popup — overridé en natif par native-share.js)
   async function signInApple() {
     if (!auth) return;
-    if (isNative()) {
-      const { FirebaseAuthentication } = await import('https://esm.sh/@capacitor-firebase/authentication@8.2.0');
-      const result = await FirebaseAuthentication.signInWithApple();
-      const provider = new firebase.auth.OAuthProvider('apple.com');
-      const credential = provider.credential({
-        idToken: result.credential?.idToken,
-        rawNonce: result.credential?.nonce,
-      });
-      await auth.signInWithCredential(credential);
-    } else {
-      const provider = new firebase.auth.OAuthProvider('apple.com');
-      provider.addScope('email'); provider.addScope('name');
-      try {
-        await auth.signInWithPopup(provider);
-      } catch (e) {
-        const c = e && e.code || '';
-        if (c.includes('popup') || c.includes('cancelled') || c.includes('blocked') ||
-            c === 'auth/operation-not-supported-in-this-environment') {
-          await auth.signInWithRedirect(provider);
-        } else throw e;
-      }
+    const provider = new firebase.auth.OAuthProvider('apple.com');
+    provider.addScope('email'); provider.addScope('name');
+    try { await auth.signInWithPopup(provider); }
+    catch (e) {
+      const c = e && e.code || '';
+      if (c.includes('popup') || c.includes('cancelled') || c.includes('blocked') ||
+          c === 'auth/operation-not-supported-in-this-environment') {
+        await auth.signInWithRedirect(provider);
+      } else throw e;
     }
   }
 
-  async function signOut() {
+    async function signOut() {
     if (auth) await auth.signOut();
   }
 
@@ -1036,7 +1008,8 @@ function renderProfile() {
   $('#profile-meta').textContent = `${State.movies.length} film${State.movies.length > 1 ? 's' : ''} dans la collection`;
   $('#set-theme').textContent = 'Thème : ' + (State.settings.theme === 'dark' ? 'Sombre' : 'Clair');
 
-  const u = Cloud.user && Cloud.user();
+  // Utiliser l'utilisateur Firebase web directement si Cloud.user() est null (mode natif)
+  const u = (Cloud.user && Cloud.user()) || (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser);
   const nameEl = $('#profile-name'), avatarEl = $('#profile-avatar'), cloudBtn = $('#set-cloud');
   if (u) {
     nameEl.textContent = u.displayName || u.email || 'Connecté';
@@ -1047,12 +1020,12 @@ function renderProfile() {
       avatarEl.style.backgroundImage = '';
       avatarEl.textContent = (u.displayName || u.email || '?').charAt(0).toUpperCase();
     }
-    if (cloudBtn) cloudBtn.textContent = 'Se déconnecter';
+    if (cloudBtn) { cloudBtn.textContent = '⎋ Se déconnecter'; cloudBtn.classList.add('danger'); }
   } else {
     nameEl.textContent = 'Invité';
     avatarEl.style.backgroundImage = '';
     avatarEl.textContent = '?';
-    if (cloudBtn) cloudBtn.textContent = 'Se connecter avec Google';
+    if (cloudBtn) { cloudBtn.textContent = 'Se connecter'; cloudBtn.classList.remove('danger'); }
   }
 
   renderProfileStats();
@@ -2382,8 +2355,16 @@ async function cloudSignIn() {
 }
 
 async function cloudSignOut() {
-  if (confirm('Se déconnecter ? Ta liste reste sauvegardée dans ton compte Google.')) {
-    try { await Cloud.signOut(); } catch (e) { toast('Erreur déconnexion'); }
+  if (confirm('Se déconnecter ?')) {
+    try {
+      // Déconnexion plugin natif si disponible
+      if (window.IS_NATIVE_APP && window.Capacitor && window.Capacitor.Plugins.FirebaseAuthentication) {
+        await window.Capacitor.Plugins.FirebaseAuthentication.signOut();
+      }
+      await Cloud.signOut();
+      State.movies = [];
+      showLogin(true);
+    } catch (e) { toast('Erreur déconnexion'); }
   }
 }
 
@@ -2443,7 +2424,8 @@ function bindEvents() {
   $('#set-pdf-wish').addEventListener('click', () => exportPDF('wishlist', false));
   $('#set-theme').addEventListener('click', toggleTheme);
   $('#set-cloud').addEventListener('click', () => {
-    if (Cloud.user && Cloud.user()) cloudSignOut();
+    const fbUser = (Cloud.user && Cloud.user()) || (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser);
+    if (fbUser) cloudSignOut();
     else cloudSignIn();
   });
   $('#set-wipe').addEventListener('click', async () => {
