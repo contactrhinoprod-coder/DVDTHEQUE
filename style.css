@@ -532,10 +532,29 @@ html, body {
 }
 .btn-photo-jacket:active { opacity: .7; }
 
-/* ====================== DEMI-ÉTOILES ====================== */
-.rating-stars { display: flex; gap: 4px; font-size: 1.6rem; }
-.star-wrap { position: relative; display: inline-flex; cursor: pointer; }
-.star-half { color: #f5b301; }
-.star-half.left { position: absolute; left: 0; width: 50%; overflow: hidden; }
-.star-half.right { opacity: 0.3; }
-.star-wrap:hover .star-half { opacity: 1; }
+/* ====================== ÉTOILES (demi-étoile CSS) ====================== */
+.stars-wrap { display: inline-flex; gap: 1px; }
+.star { display: inline-block; color: #555; font-size: inherit; }
+.star.full { color: #f5b301; }
+.star.empty { color: #444; }
+/* Demi-étoile : superposition clip gauche (colorée) sur fond gris */
+.star.half { position: relative; display: inline-block; color: #444; }
+.star.half .star-fg {
+  position: absolute; left: 0; top: 0;
+  width: 50%; overflow: hidden; color: #f5b301;
+  display: inline-block;
+}
+.star.half .star-bg { color: #444; }
+/* Étoiles éditeur (plus grandes, cliquables) */
+.rating-stars { display: flex; gap: 6px; font-size: 1.8rem; cursor: pointer; }
+.edit-star { display: inline-block; color: #444; transition: transform .1s; }
+.edit-star.full { color: #f5b301; }
+.edit-star.empty { color: #444; opacity: .4; }
+.edit-star.half { position: relative; display: inline-block; color: #444; }
+.edit-star.half .star-fg {
+  position: absolute; left: 0; top: 0;
+  width: 50%; overflow: hidden; color: #f5b301;
+  display: inline-block;
+}
+.edit-star.half .star-bg { color: #444; opacity: .4; }
+.edit-star:active { transform: scale(1.3); }

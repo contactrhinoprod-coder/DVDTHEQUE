@@ -61,29 +61,32 @@ function fmtPrice(v) {
   return Number(v).toFixed(2).replace('.', ',') + ' €';
 }
 
-// Affiche N étoiles avec support demi-étoile (rating = 0..5 par pas de 0.5)
-// mode: 'text' = ★½☆ caractères, 'svg' = étoiles SVG cliquables pour l'éditeur
+// Affiche N étoiles avec support demi-étoile visuelle
+// rating = 0..5 par pas de 0.5
+// mode 'text' = pour vignettes (petites étoiles CSS)
+// mode 'edit' = étoiles cliquables dans l'éditeur
 function renderStars(rating, mode = 'text') {
-  const r = rating || 0;
-  if (mode === 'text') {
-    let s = '';
-    for (let i = 1; i <= 5; i++) {
-      if (r >= i) s += '★';
-      else if (r >= i - 0.5) s += '½';
-      else s += '☆';
-    }
-    return s;
-  }
-  // mode SVG interactif (éditeur) — 5 étoiles, chaque étoile divisée en 2 zones cliquables
+  const r = Number(rating) || 0;
   const stars = [];
   for (let i = 1; i <= 5; i++) {
-    const full = r >= i;
-    const half = !full && r >= i - 0.5;
-    stars.push(`<span class="star-wrap" data-v="${i}">
-      <span class="star-half left" data-v="${i - 0.5}">${half ? '★' : '☆'}</span>
-      <span class="star-half right" data-v="${i}" style="opacity:${full ? 1 : 0.25}">★</span>
-    </span>`);
+    const full  = r >= i;
+    const half  = !full && r >= i - 0.5;
+    if (mode === 'text') {
+      // Affichage inline : étoile pleine, demi-étoile CSS, ou vide
+      if (full)      stars.push('<span class="star full">★</span>');
+      else if (half) stars.push('<span class="star half"><span class="star-fg">★</span><span class="star-bg">★</span></span>');
+      else           stars.push('<span class="star empty">★</span>');
+    } else {
+      // Étoile cliquable dans l'éditeur
+      let cls = full ? 'full' : half ? 'half' : 'empty';
+      stars.push(`<span class="star edit-star ${cls}" data-i="${i}">${
+        full ? '★' : half
+          ? '<span class="star-fg">★</span><span class="star-bg">★</span>'
+          : '★'
+      }</span>`);
+    }
   }
+  if (mode === 'text') return `<span class="stars-wrap">${stars.join('')}</span>`;
   return `<div class="rating-stars" id="rating-edit">${stars.join('')}</div>`;
 }
 
@@ -592,7 +595,14 @@ const AudioRecorder = (() => {
    ============================================================ */
 
 /* ---- Navigation entre vues ---- */
+const scrollSave = { library: 0, wishlist: 0 };
+
 function go(view, opts = {}) {
+  // Sauvegarder la position avant de quitter library ou wishlist
+  if (State.view === 'library' || State.view === 'wishlist') {
+    scrollSave[State.view] = $('#views').scrollTop;
+  }
+
   State.view = view;
   $$('.view').forEach(v => (v.hidden = v.dataset.view !== view));
   $$('.tab[data-go]').forEach(t => t.classList.toggle('active', t.dataset.go === view));
@@ -603,12 +613,14 @@ function go(view, opts = {}) {
   $('#search-toggle').hidden = view !== 'library';
   if (view !== 'library') { $('#searchbar').hidden = true; }
 
-  if (view === 'library') renderLibrary();
-  if (view === 'wishlist') renderWishlist();
-  if (view === 'random') renderRandomView();
-  if (view === 'quiz') renderQuizHome();
-  if (view === 'profile') renderProfile();
-  $('#views').scrollTop = 0;
+  if (view === 'library') { renderLibrary(); requestAnimationFrame(() => { $('#views').scrollTop = scrollSave.library; }); }
+  else if (view === 'wishlist') { renderWishlist(); requestAnimationFrame(() => { $('#views').scrollTop = scrollSave.wishlist; }); }
+  else {
+    if (view === 'random') renderRandomView();
+    if (view === 'quiz') renderQuizHome();
+    if (view === 'profile') renderProfile();
+    $('#views').scrollTop = 0;
+  }
 }
 
 /* ---- Filtre + tri appliqués à la collection ---- */
@@ -766,14 +778,7 @@ function renderDetail(m) {
 
     <div class="detail-section">
       <h4>Ma note</h4>
-      <div class="rating-stars" id="rating-edit">${[1,2,3,4,5].map(i => {
-        const full = (m.rating||0) >= i;
-        const half = !full && (m.rating||0) >= i - 0.5;
-        return `<span class="star-wrap">
-          <span class="star-half left" data-v="${i-0.5}">${half||full ? (half?'★':'★') : '☆'}</span>
-          <span class="star-half right" data-v="${i}" style="opacity:${full?1:0.3}">★</span>
-        </span>`;
-      }).join('')}</div>
+      ${renderStars(m.rating || 0, 'edit')}
     </div>
 
     ${m.synopsis ? `<div class="detail-section"><h4>Synopsis</h4><p>${esc(m.synopsis)}</p></div>` : ''}
@@ -814,9 +819,15 @@ function renderDetail(m) {
   `;
 
   // Note
-  $$('#rating-edit .star-half').forEach(s => s.addEventListener('click', async () => {
-    const v = +s.dataset.v;
-    m.rating = (m.rating === v) ? 0 : v;
+  $$('#rating-edit .edit-star').forEach(s => s.addEventListener('click', async () => {
+    const i = +s.dataset.i;
+    const cur = m.rating || 0;
+    // 1er clic sur cette étoile → demi (i-0.5)
+    // 2e clic (déjà à demi) → pleine (i)
+    // 3e clic (déjà pleine) → efface (retour à i-1)
+    if (cur === i - 0.5) m.rating = i;
+    else if (cur === i)  m.rating = i - 1 || 0;
+    else                 m.rating = i - 0.5;
     await Store.putMovie(m);
     if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
     renderDetail(m);
