@@ -531,3 +531,11 @@ html, body {
   font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .btn-photo-jacket:active { opacity: .7; }
+
+/* ====================== DEMI-ÉTOILES ====================== */
+.rating-stars { display: flex; gap: 4px; font-size: 1.6rem; }
+.star-wrap { position: relative; display: inline-flex; cursor: pointer; }
+.star-half { color: #f5b301; }
+.star-half.left { position: absolute; left: 0; width: 50%; overflow: hidden; }
+.star-half.right { opacity: 0.3; }
+.star-wrap:hover .star-half { opacity: 1; }

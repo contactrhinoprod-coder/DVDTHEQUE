@@ -44,6 +44,11 @@ function toast(msg) {
   toast._t = setTimeout(() => (t.hidden = true), 2600);
 }
 
+const TAG_LABELS = {
+  top3: '🏆 Top 3', nanard: '🤪 Nanard', navet: '💩 Navet',
+  classic: '🎩 Classique', zombie: '🧟 Zombie', findumonde: '🌍 Fin du monde',
+};
+
 function fmtDuration(min) {
   if (!min) return '—';
   const h = Math.floor(min / 60), m = min % 60;
@@ -54,6 +59,32 @@ function fmtDuration(min) {
 function fmtPrice(v) {
   if (v == null || v === '') return '';
   return Number(v).toFixed(2).replace('.', ',') + ' €';
+}
+
+// Affiche N étoiles avec support demi-étoile (rating = 0..5 par pas de 0.5)
+// mode: 'text' = ★½☆ caractères, 'svg' = étoiles SVG cliquables pour l'éditeur
+function renderStars(rating, mode = 'text') {
+  const r = rating || 0;
+  if (mode === 'text') {
+    let s = '';
+    for (let i = 1; i <= 5; i++) {
+      if (r >= i) s += '★';
+      else if (r >= i - 0.5) s += '½';
+      else s += '☆';
+    }
+    return s;
+  }
+  // mode SVG interactif (éditeur) — 5 étoiles, chaque étoile divisée en 2 zones cliquables
+  const stars = [];
+  for (let i = 1; i <= 5; i++) {
+    const full = r >= i;
+    const half = !full && r >= i - 0.5;
+    stars.push(`<span class="star-wrap" data-v="${i}">
+      <span class="star-half left" data-v="${i - 0.5}">${half ? '★' : '☆'}</span>
+      <span class="star-half right" data-v="${i}" style="opacity:${full ? 1 : 0.25}">★</span>
+    </span>`);
+  }
+  return `<div class="rating-stars" id="rating-edit">${stars.join('')}</div>`;
 }
 
 /* ============================================================
@@ -633,7 +664,7 @@ function renderLibrary() {
         <div class="meta">
           <div class="t">${esc(m.title)}</div>
           <div class="sub">${m.year || '—'} · ${esc(m.genre || '')} · ${m.format || 'DVD'}${priceTxt ? ' · <span class="price-inline">' + priceTxt + '</span>' : ''}</div>
-          <div class="sub">${'★'.repeat(m.rating||0)}${'☆'.repeat(5-(m.rating||0))}</div>
+          <div class="sub">${m.rating ? renderStars(m.rating) : ''}</div>
         </div></div>`;
     }
     return `<div class="card" data-id="${m.id}">
@@ -642,7 +673,7 @@ function renderLibrary() {
         <span class="fmt-badge">${m.format || 'DVD'}</span>
         ${m.tag === 'top3' ? '<span class="top3-badge">🏆 TOP 3</span>' : ''}
       </div>
-      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}${priceTxt ? ' <span class="price-inline">' + priceTxt + '</span>' : ''}</div>${m.rating ? `<div class="card-stars">${'★'.repeat(m.rating)}${'☆'.repeat(5-m.rating)}</div>` : ''}</div>
+      <div class="meta"><div class="t">${esc(m.title)}</div><div class="y">${m.year || ''}${priceTxt ? ' <span class="price-inline">' + priceTxt + '</span>' : ''}</div>${m.rating ? `<div class="card-stars">${renderStars(m.rating)}</div>` : ''}</div>
     </div>`;
   }).join('');
 
@@ -697,7 +728,7 @@ function renderActiveFilters() {
   const box = $('#active-filters'); const f = State.filters;
   const chips = [];
   if (f.genre)  chips.push(['Genre', f.genre, 'genre']);
-  if (f.tag)    chips.push(['Catégorie', ({top3:'🏆 Top 3',nanard:'🤪 Nanard',navet:'💩 Navet'})[f.tag], 'tag']);
+  if (f.tag)    chips.push(['Catégorie', TAG_LABELS[f.tag] || f.tag, 'tag']);
   if (f.year)   chips.push(['Année', f.year, 'year']);
   if (f.format) chips.push(['Format', f.format, 'format']);
   if (f.rating) chips.push(['Note', '★' + f.rating + '+', 'rating']);
@@ -735,8 +766,14 @@ function renderDetail(m) {
 
     <div class="detail-section">
       <h4>Ma note</h4>
-      <div class="rating-stars" id="rating-edit">${[1,2,3,4,5].map(i =>
-        `<span data-v="${i}" class="${i <= (m.rating||0) ? 'on' : ''}">★</span>`).join('')}</div>
+      <div class="rating-stars" id="rating-edit">${[1,2,3,4,5].map(i => {
+        const full = (m.rating||0) >= i;
+        const half = !full && (m.rating||0) >= i - 0.5;
+        return `<span class="star-wrap">
+          <span class="star-half left" data-v="${i-0.5}">${half||full ? (half?'★':'★') : '☆'}</span>
+          <span class="star-half right" data-v="${i}" style="opacity:${full?1:0.3}">★</span>
+        </span>`;
+      }).join('')}</div>
     </div>
 
     ${m.synopsis ? `<div class="detail-section"><h4>Synopsis</h4><p>${esc(m.synopsis)}</p></div>` : ''}
@@ -749,7 +786,7 @@ function renderDetail(m) {
         <div><div class="lbl">Durée</div><div class="val">${fmtDuration(m.duration)}</div></div>
         <div><div class="lbl">Prix d'achat</div><div class="val">${m.price != null && m.price !== '' ? fmtPrice(m.price) : '—'}</div></div>
         <div><div class="lbl">Code-barres</div><div class="val">${m.barcode || '—'}</div></div>
-        ${m.tag ? `<div><div class="lbl">Catégorie</div><div class="val">${({top3:'🏆 Top 3',nanard:'🤪 Nanard',navet:'💩 Navet'})[m.tag] || '—'}</div></div>` : ''}
+        ${m.tag ? `<div><div class="lbl">Catégorie</div><div class="val">${TAG_LABELS[m.tag] || m.tag}</div></div>` : ''}
       </div>
     </div>
 
@@ -777,9 +814,8 @@ function renderDetail(m) {
   `;
 
   // Note
-  $$('#rating-edit span').forEach(s => s.addEventListener('click', async () => {
+  $$('#rating-edit .star-half').forEach(s => s.addEventListener('click', async () => {
     const v = +s.dataset.v;
-    // Re-cliquer sur la note actuelle l'efface (toggle)
     m.rating = (m.rating === v) ? 0 : v;
     await Store.putMovie(m);
     if (Cloud.enabled()) Cloud.pushMovie(m).catch(() => {});
@@ -889,19 +925,28 @@ async function toggleRecording(m) {
 /* ---- Aléatoire ---- */
 function renderRandomView() {
   const gsel = $('#random-genre');
+  const genres = [...new Set(State.movies.filter(m=>!m.wishlist).map(m => m.genre).filter(Boolean))].sort();
+  const tags = [...new Set(State.movies.filter(m=>!m.wishlist && m.tag).map(m => m.tag))];
   gsel.innerHTML = '<option value="">Tous genres</option>' +
-    [...new Set(State.movies.map(m => m.genre).filter(Boolean))].sort()
-      .map(g => `<option>${esc(g)}</option>`).join('');
+    genres.map(g => `<option value="g:${esc(g)}">${esc(g)}</option>`).join('') +
+    (tags.length ? '<option disabled>──────────</option>' : '') +
+    tags.map(t => `<option value="t:${t}">${TAG_LABELS[t] || t}</option>`).join('');
 }
 
 let randomPick = null;
 function spinRandom() {
-  const genre = $('#random-genre').value;
+  const sel = $('#random-genre').value;
   const minR = +$('#random-rating').value;
+  const isTag = sel.startsWith('t:');
+  const isGenre = sel.startsWith('g:');
+  const genre = isGenre ? sel.slice(2) : '';
+  const tag = isTag ? sel.slice(2) : '';
   let pool = State.movies.filter(m =>
     !m.wishlist &&
     (!State.formatFilter || (m.format || 'DVD') === State.formatFilter) &&
-    (!genre || m.genre === genre) && (m.rating || 0) >= minR);
+    (!genre || m.genre === genre) &&
+    (!tag || m.tag === tag) &&
+    (m.rating || 0) >= minR);
   if (!pool.length) { toast('Aucun film ne correspond'); return; }
 
   const reel = $('#random-reel');
@@ -1073,6 +1118,9 @@ function openEditor(data, isEdit = false, onDone = null) {
       <option value="top3" ${m.tag==='top3' ? 'selected' : ''}>🏆 Top 3</option>
       <option value="nanard" ${m.tag==='nanard' ? 'selected' : ''}>🤪 Nanard</option>
       <option value="navet" ${m.tag==='navet' ? 'selected' : ''}>💩 Navet</option>
+      <option value="classic" ${m.tag==='classic' ? 'selected' : ''}>🎩 Classique</option>
+      <option value="zombie" ${m.tag==='zombie' ? 'selected' : ''}>🧟 Zombie</option>
+      <option value="findumonde" ${m.tag==='findumonde' ? 'selected' : ''}>🌍 Fin du monde</option>
     </select></div>
     ${field('director', 'Réalisateur', m.director)}
     ${field('actors', 'Acteurs', m.actors)}
@@ -1284,7 +1332,7 @@ async function shareMovie(m) {
   if (m.director) lines.push(`Réalisateur : ${m.director}`);
   if (m.genre)    lines.push(`Genre : ${m.genre}`);
   if (m.format)   lines.push(`Format : ${m.format}`);
-  if (m.rating)   lines.push(`Note : ${'★'.repeat(m.rating)}${'☆'.repeat(5 - m.rating)}`);
+  if (m.rating)   lines.push(`Note : ${renderStars(m.rating)}`);
   if (m.synopsis) lines.push(`\n${m.synopsis}`);
   const texts = (m.textComments || []).map(c => c.text).filter(Boolean);
   if (texts.length) {
@@ -1545,16 +1593,10 @@ function setOcrState(state, data = {}) {
   if (cancel) cancel.addEventListener('click', closeOcrModal);
 }
 
-/* Gère le cadre de recadrage (déplacement + redimensionnement tactile)
-   et les boutons « Analyser » (zone) / « Analyser toute l'image ». */
 /* ---- Filtres : catégories perso + genres ---- */
 function openFilters() {
   const genres = GENRES;
-  const cats = [
-    { v: 'top3', label: '🏆 Top 3' },
-    { v: 'nanard', label: '🤪 Nanards' },
-    { v: 'navet', label: '💩 Navets' },
-  ];
+  const cats = Object.entries(TAG_LABELS).map(([v, label]) => ({ v, label }));
 
   showOcrModal();
   const modal = $('#ocr-modal');
@@ -1744,13 +1786,13 @@ async function exportPDF(mode = 'library', withPrice = false) {
     for (const g of genresSorted) {
       // En-tête de genre
       if (col !== 0) nextRow();            // termine la rangée en cours
-      ensureSpace(12 + cellH);             // place pour l'en-tête + au moins une rangée
+      ensureSpace(28 + cellH);             // place pour l'en-tête grand + au moins une rangée
       curY += 4;
-      pdf.setFont(undefined, 'bold'); pdf.setFontSize(13); pdf.setTextColor(0);
+      pdf.setFont(undefined, 'bold'); pdf.setFontSize(36); pdf.setTextColor(0);
       pdf.text(`${g}  (${byGenre[g].length})`, margin, curY);
       pdf.setFont(undefined, 'normal');
-      pdf.setDrawColor(200); pdf.line(margin, curY + 2, pageW - margin, curY + 2);
-      curY += 8;
+      pdf.setDrawColor(200); pdf.line(margin, curY + 4, pageW - margin, curY + 4);
+      curY += 20;
       col = 0;
       // Films du genre
       for (const m of byGenre[g]) {
