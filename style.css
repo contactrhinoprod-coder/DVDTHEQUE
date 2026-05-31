@@ -408,8 +408,16 @@ html, body {
   display: inline-flex; align-items: center; justify-content: center; gap: 12px;
   width: 100%; padding: 14px 20px; border-radius: 12px; border: none;
   background: #fff; color: #1f1f1f; font-size: 1rem; font-weight: 600; cursor: pointer;
+  margin-bottom: 12px;
 }
 .login-google:active { opacity: .85; }
+.login-apple {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 14px 20px; border-radius: 12px; border: none;
+  background: #000; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer;
+  margin-bottom: 12px;
+}
+.login-apple:active { opacity: .85; }
 .g-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; border-radius: 50%;

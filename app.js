@@ -321,12 +321,62 @@ const Cloud = (() => {
     return true;
   }
 
-  // Connexion via Google (popup)
+  // Détecte si on tourne dans Capacitor (app native iOS/Android)
+  function isNative() {
+    return window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+  }
+
+  // Connexion Google — plugin natif dans Capacitor, popup web sinon
   async function signInGoogle() {
     if (!auth) return;
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
-    // onAuthStateChanged se charge de la suite
+    if (isNative()) {
+      // Plugin @capacitor-firebase/authentication
+      const { FirebaseAuthentication } = await import('https://esm.sh/@capacitor-firebase/authentication@8.2.0');
+      const result = await FirebaseAuthentication.signInWithGoogle();
+      const credential = firebase.auth.GoogleAuthProvider.credential(
+        result.credential?.idToken
+      );
+      await auth.signInWithCredential(credential);
+    } else {
+      // Web : popup avec repli redirect
+      const provider = new firebase.auth.GoogleAuthProvider();
+      try {
+        await auth.signInWithPopup(provider);
+      } catch (e) {
+        const c = e && e.code || '';
+        if (c.includes('popup') || c.includes('cancelled') || c.includes('blocked') ||
+            c === 'auth/operation-not-supported-in-this-environment') {
+          await auth.signInWithRedirect(provider);
+        } else throw e;
+      }
+    }
+  }
+
+  // Connexion Apple — plugin natif dans Capacitor, popup web sinon
+  async function signInApple() {
+    if (!auth) return;
+    if (isNative()) {
+      const { FirebaseAuthentication } = await import('https://esm.sh/@capacitor-firebase/authentication@8.2.0');
+      const result = await FirebaseAuthentication.signInWithApple();
+      const provider = new firebase.auth.OAuthProvider('apple.com');
+      const credential = provider.credential({
+        idToken: result.credential?.idToken,
+        rawNonce: result.credential?.nonce,
+      });
+      await auth.signInWithCredential(credential);
+    } else {
+      const provider = new firebase.auth.OAuthProvider('apple.com');
+      provider.addScope('email'); provider.addScope('name');
+      try {
+        await auth.signInWithPopup(provider);
+      } catch (e) {
+        const c = e && e.code || '';
+        if (c.includes('popup') || c.includes('cancelled') || c.includes('blocked') ||
+            c === 'auth/operation-not-supported-in-this-environment') {
+          await auth.signInWithRedirect(provider);
+        } else throw e;
+      }
+    }
   }
 
   async function signOut() {
@@ -370,7 +420,7 @@ const Cloud = (() => {
     }
   }
 
-  return { init, configured, enabled, user, signInGoogle, signOut,
+  return { init, configured, enabled, user, signInGoogle, signInApple, signOut,
            pushMovie, deleteRemote, pullAll, pushAll, uid: () => uid };
 })();
 
@@ -2239,17 +2289,30 @@ function showLogin(show) {
 }
 
 function bindLogin() {
-  const btn = $('#login-google-btn');
-  if (btn) btn.addEventListener('click', async () => {
+  const showErr = (msg) => {
     const err = $('#login-error');
-    if (err) err.hidden = true;
-    try {
-      await Cloud.signInGoogle();
-      // onAuthChanged prend le relais
-    } catch (e) {
-      console.warn(e);
-      if (err) { err.textContent = 'Connexion échouée. Réessayez.'; err.hidden = false; }
-    }
+    if (err) { err.textContent = msg; err.hidden = false; }
+  };
+  const hideErr = () => { const err = $('#login-error'); if (err) err.hidden = true; };
+
+  const btnG = $('#login-google-btn');
+  if (btnG) btnG.addEventListener('click', async () => {
+    hideErr();
+    try { await Cloud.signInGoogle(); }
+    catch (e) { console.warn(e); showErr('Connexion Google échouée. Réessayez.'); }
+  });
+
+  const btnA = $('#login-apple-btn');
+  if (btnA) btnA.addEventListener('click', async () => {
+    hideErr();
+    try { await Cloud.signInApple(); }
+    catch (e) { console.warn(e); showErr('Connexion Apple échouée. Réessayez.'); }
+  });
+
+  const btnSkip = $('#login-skip-btn');
+  if (btnSkip) btnSkip.addEventListener('click', () => {
+    showLogin(false);
+    go('library');
   });
 }
 
