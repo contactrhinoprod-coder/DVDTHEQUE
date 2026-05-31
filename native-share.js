@@ -79,26 +79,23 @@
 
   async function initAdMob() {
     try {
-      const { AdMob } = await import('https://esm.sh/@capacitor-community/admob@8.0.0');
+      const AdMob = window.Capacitor.Plugins.AdMob;
+      if (!AdMob) { console.warn('[AdMob] plugin introuvable'); return; }
 
-      // Initialiser AdMob (sans ATT pour l'instant — on l'ajoutera avant soumission)
       await AdMob.initialize({ requestTrackingAuthorization: true });
 
-      // Bannière en bas, permanente
       await AdMob.showBanner({
         adId: BANNER_ID,
         adSize: 'BANNER',
         position: 'BOTTOM_CENTER',
-        margin: 60, // au-dessus de la tabbar
+        margin: 60,
         isTesting: false,
       });
 
       console.log('[AdMob] Bannière affichée');
 
-      // Précharger l'interstitielle
       loadInter(AdMob);
 
-      // Interstitielle après 10 films ajoutés
       window._admobOnFilmAdded = function() {
         filmsAddedSinceLoad++;
         if (filmsAddedSinceLoad >= 10 && interLoaded) {
@@ -107,14 +104,12 @@
         }
       };
 
-      // Interstitielle avant export PDF
       window._admobOnPdfExport = function() {
         if (interLoaded) showInter(AdMob);
       };
 
-      // Interstitielle à la 3e session et toutes les 3 sessions
-      if (sessionCount % 3 === 0 && interLoaded) {
-        setTimeout(() => showInter(AdMob), 3000);
+      if (sessionCount % 3 === 0) {
+        setTimeout(() => { if (interLoaded) showInter(AdMob); }, 3000);
       }
 
     } catch (e) {
@@ -136,7 +131,6 @@
     try {
       interLoaded = false;
       await AdMob.showInterstitial();
-      // Recharger pour la prochaine fois
       setTimeout(() => loadInter(AdMob), 1000);
     } catch (e) {
       console.warn('[AdMob] interstitielle show erreur', e);
