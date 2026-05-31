@@ -1713,6 +1713,7 @@ function imageToDataURL(url) {
    sous forme de grille de vignettes : affiche + titre + réalisateur
    + année + genre + format. */
 async function exportPDF(mode = 'library', withPrice = false) {
+  if (window._admobOnPdfExport) window._admobOnPdfExport();
   const isWish = mode === 'wishlist';
   const movies = isWish
     ? State.movies.filter(m => m.wishlist)
