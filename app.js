@@ -1715,8 +1715,16 @@ function imageToDataURL(url) {
     };
     img.onerror = () => res(null);
     // Ajouter timestamp pour éviter le cache
-    // Forcer JPEG pour éviter les problèmes WEBP dans WebView iOS
-    const cleanUrl = url.replace(/\.webp$/i, '.jpg');
+    // Forcer JPEG — remplacer .webp par .jpg et utiliser w342 pour TMDB
+    let cleanUrl = url;
+    // Si c'est une URL TMDB, forcer le format JPEG
+    if (url.includes('image.tmdb.org')) {
+      cleanUrl = url.replace('/w500/', '/w342/').replace('.webp', '.jpg');
+    } else if (url.startsWith('data:image/webp')) {
+      // Image base64 WEBP — on ne peut pas la convertir sans lib, on skip
+      res(null);
+      return;
+    }
     img.src = cleanUrl;
   });
 }
