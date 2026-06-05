@@ -1734,6 +1734,8 @@ function imageToDataURL(url) {
    + année + genre + format. */
 async function exportPDF(mode = 'library', withPrice = false) {
   if (window._admobOnPdfExport) window._admobOnPdfExport();
+  // Afficher un toast pendant la génération
+  toast('Génération du PDF en cours…');
   const isWish = mode === 'wishlist';
   const movies = isWish
     ? State.movies.filter(m => m.wishlist)
