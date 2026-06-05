@@ -1697,15 +1697,25 @@ function loadJsPDF() {
 function imageToDataURL(url) {
   return new Promise((res) => {
     if (!url) return res(null);
-    fetch(url)
-      .then(r => r.blob())
-      .then(blob => {
-        const r = new FileReader();
-        r.onload = () => res(r.result);
-        r.onerror = () => res(null);
-        r.readAsDataURL(blob);
-      })
-      .catch(() => res(null));
+    // Utiliser canvas pour contourner les restrictions CORS dans WebView Capacitor
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        res(canvas.toDataURL('image/jpeg', 0.85));
+      } catch (e) {
+        // Si canvas tainted (CORS), on retourne null
+        res(null);
+      }
+    };
+    img.onerror = () => res(null);
+    // Ajouter timestamp pour éviter le cache
+    img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
   });
 }
 
