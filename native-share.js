@@ -69,8 +69,8 @@
 (function () {
   if (!window.IS_NATIVE_APP) return;
 
-  const BANNER_ID = 'ca-app-pub-7090581291853912/4930609655';
-  const INTER_ID  = 'ca-app-pub-7090581291853912/7003754596';
+  const BANNER_ID = ((window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android') ? 'ca-app-pub-7090581291853912/4853524973' : 'ca-app-pub-7090581291853912/4930609655');
+  const INTER_ID  = ((window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android') ? 'ca-app-pub-7090581291853912/4663998884' : 'ca-app-pub-7090581291853912/7003754596');
 
   let interLoaded = false;
   let filmsAddedSinceLoad = 0;
