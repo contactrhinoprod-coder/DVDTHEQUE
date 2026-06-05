@@ -74,6 +74,8 @@
 
   let interLoaded = false;
   let filmsAddedSinceLoad = 0;
+  let lastInterTime = 0;
+  const INTER_MIN_INTERVAL = 5 * 60 * 1000; // 5 minutes minimum entre deux pubs
   let sessionCount = parseInt(localStorage.getItem('_admob_sessions') || '0') + 1;
   localStorage.setItem('_admob_sessions', sessionCount);
 
@@ -128,8 +130,11 @@
   }
 
   async function showInter(AdMob) {
+    const now = Date.now();
+    if (now - lastInterTime < INTER_MIN_INTERVAL) { console.log('[AdMob] Inter throttled'); return; }
     try {
       interLoaded = false;
+      lastInterTime = now;
       await AdMob.showInterstitial();
       setTimeout(() => loadInter(AdMob), 1000);
     } catch (e) {

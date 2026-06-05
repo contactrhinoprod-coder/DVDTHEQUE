@@ -1715,7 +1715,9 @@ function imageToDataURL(url) {
     };
     img.onerror = () => res(null);
     // Ajouter timestamp pour éviter le cache
-    img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    // Forcer JPEG pour éviter les problèmes WEBP dans WebView iOS
+    const cleanUrl = url.replace(/\.webp$/i, '.jpg');
+    img.src = cleanUrl;
   });
 }
 
