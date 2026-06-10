@@ -94,11 +94,19 @@
         adId: BANNER_ID,
         adSize: 'BANNER',
         position: 'BOTTOM_CENTER',
-        margin: 64, // hauteur tabbar
+        margin: 0,
         isTesting: false,
       });
 
       console.log('[AdMob] Bannière affichée');
+      // Écouter l'événement de taille de la bannière pour ajuster la tabbar
+      AdMob.addListener('onAdLoaded', (info) => {
+        const h = (info && info.adHeight) ? info.adHeight : 50;
+        document.documentElement.style.setProperty('--admob-h', h + 'px');
+        console.log('[AdMob] hauteur bannière:', h);
+      });
+      // Valeur par défaut immédiate
+      document.documentElement.style.setProperty('--admob-h', '50px');
 
       loadInter(AdMob);
 

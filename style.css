@@ -236,8 +236,8 @@ html, body {
 
 /* ---------------- Tabbar ---------------- */
 #tabbar {
-  height: calc(var(--tabbar-h) + var(--safe-bottom));
-  padding-bottom: var(--safe-bottom);
+  height: calc(var(--tabbar-h) + var(--safe-bottom) + var(--admob-h, 0px));
+  padding-bottom: calc(var(--safe-bottom) + var(--admob-h, 0px));
   display: flex; background: var(--bg-2);
   border-top: 1px solid var(--border);
 }
