@@ -94,7 +94,7 @@
         adId: BANNER_ID,
         adSize: 'BANNER',
         position: 'BOTTOM_CENTER',
-        margin: 0,
+        margin: 64, // hauteur tabbar
         isTesting: false,
       });
 
