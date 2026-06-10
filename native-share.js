@@ -92,7 +92,7 @@
 
       await AdMob.showBanner({
         adId: BANNER_ID,
-        adSize: 'BANNER',
+        adSize: 'ADAPTIVE_BANNER',
         position: 'BOTTOM_CENTER',
         margin: 0,
         isTesting: false,
