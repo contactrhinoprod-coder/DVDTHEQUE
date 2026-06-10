@@ -78,34 +78,36 @@
     </div>
 
     <!-- Conteneur des vues. Une seule .view est visible à la fois -->
+    <!-- Filtres bibliothèque (hors scroll pour sticky Android) -->
+    <div id="library-header" hidden>
+      <div class="format-seg" id="format-seg">
+        <button data-fmt="" class="active">Tout</button>
+        <button data-fmt="DVD">DVD</button>
+        <button data-fmt="Blu-ray">Blu-ray</button>
+        <button data-fmt="4K">4K</button>
+      </div>
+      <div class="toolbar">
+        <div class="seg" id="layout-seg">
+          <button data-layout="grid" class="active" aria-label="Grille">▦</button>
+          <button data-layout="list" aria-label="Liste">≣</button>
+        </div>
+        <select id="sort-select" class="select">
+          <option value="title">Tri : Titre A→Z</option>
+          <option value="title_desc">Tri : Titre Z→A</option>
+          <option value="year_desc">Tri : Année récente</option>
+          <option value="year">Tri : Année ancienne</option>
+          <option value="rating_desc">Tri : Mieux notés</option>
+          <option value="added_desc">Tri : Ajout récent</option>
+        </select>
+        <button class="select" id="filter-btn">Filtres</button>
+      </div>
+      <div id="active-filters" class="active-filters"></div>
+    </div>
+
     <main id="views">
 
       <!-- ---------- VUE : Bibliothèque ---------- -->
       <section class="view" data-view="library">
-        <div class="format-seg" id="format-seg">
-          <button data-fmt="" class="active">Tout</button>
-          <button data-fmt="DVD">DVD</button>
-          <button data-fmt="Blu-ray">Blu-ray</button>
-          <button data-fmt="4K">4K</button>
-        </div>
-        <div class="toolbar">
-          <div class="seg" id="layout-seg">
-            <button data-layout="grid" class="active" aria-label="Grille">▦</button>
-            <button data-layout="list" aria-label="Liste">≣</button>
-          </div>
-          <select id="sort-select" class="select">
-            <option value="title">Tri : Titre A→Z</option>
-            <option value="title_desc">Tri : Titre Z→A</option>
-            <option value="year_desc">Tri : Année récente</option>
-            <option value="year">Tri : Année ancienne</option>
-            <option value="rating_desc">Tri : Mieux notés</option>
-            <option value="added_desc">Tri : Ajout récent</option>
-          </select>
-          <button class="select" id="filter-btn">Filtres</button>
-        </div>
-
-        <!-- Pastilles de filtre actif -->
-        <div id="active-filters" class="active-filters"></div>
 
         <div id="library-grid" class="grid"></div>
         <div id="library-total" class="library-total" hidden></div>

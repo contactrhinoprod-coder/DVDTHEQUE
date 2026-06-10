@@ -620,6 +620,9 @@ const AudioRecorder = (() => {
 const scrollSave = { library: 0, wishlist: 0 };
 
 function go(view, opts = {}) {
+  // Afficher/masquer le header bibliothèque
+  const libHeader = $('#library-header');
+  if (libHeader) libHeader.hidden = (view !== 'library');
   // Sauvegarder la position avant de quitter library ou wishlist
   if (State.view === 'library' || State.view === 'wishlist') {
     scrollSave[State.view] = $('#views').scrollTop;

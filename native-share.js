@@ -94,7 +94,7 @@
         adId: BANNER_ID,
         adSize: 'BANNER',
         position: 'BOTTOM_CENTER',
-        margin: 60,
+        margin: 0,
         isTesting: false,
       });
 
