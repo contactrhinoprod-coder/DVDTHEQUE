@@ -92,9 +92,25 @@ html, body {
 .view { padding: 12px 12px calc(var(--tabbar-h) + var(--safe-bottom) + 16px); }
 
 /* ---------------- Toolbar (library) ---------------- */
+.format-seg {
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--safe-top));
+  z-index: 18;
+  background: var(--bg);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 6px;
+}
 .toolbar {
-  display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--safe-top) + 54px);
+  z-index: 17;
+  background: var(--bg);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 8px; align-items: center;
   flex-wrap: wrap;
+  margin-bottom: 0;
 }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
 .seg button {

@@ -84,7 +84,11 @@
       const AdMob = window.Capacitor.Plugins.AdMob;
       if (!AdMob) { console.warn('[AdMob] plugin introuvable'); return; }
 
-      await AdMob.initialize({ requestTrackingAuthorization: true });
+      const isAndroid = window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'android';
+      await AdMob.initialize({ 
+        requestTrackingAuthorization: true,
+        testingDevices: isAndroid ? ['EMULATOR'] : [],
+      });
 
       await AdMob.showBanner({
         adId: BANNER_ID,
