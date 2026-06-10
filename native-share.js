@@ -106,7 +106,7 @@
         console.log('[AdMob] hauteur bannière:', h);
       });
       // Valeur par défaut immédiate
-      document.documentElement.style.setProperty('--admob-h', '50px');
+      document.documentElement.style.setProperty('--admob-h', '70px');
 
       loadInter(AdMob);
 
