@@ -674,3 +674,20 @@ html, body {
   font-size: .82rem; color: var(--text-dim);
   line-height: 1.5;
 }
+
+.series-providers {
+  background: var(--surface); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 16px;
+}
+.series-providers-title {
+  font-size: .85rem; font-weight: 700; color: var(--text-dim);
+  margin-bottom: 10px; text-transform: uppercase; letter-spacing: .05em;
+}
+.series-providers-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.provider-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-2); border-radius: 10px; padding: 6px 12px;
+}
+.provider-logo { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; }
+.provider-name { font-size: .85rem; font-weight: 600; }
+.series-no-provider { font-size: .82rem; color: var(--text-dim); margin-bottom: 12px; }

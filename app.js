@@ -2439,6 +2439,17 @@ async function openSeriesDetail(seriesId) {
           <div class="series-progress-fill" id="progress-fill-${seriesId}" style="width:${pct}%"></div>
         </div>
         <div class="series-progress-text" id="progress-text-${seriesId}">${seen} / ${total} épisodes vus (${pct}%)</div>
+        ${(s.providers && s.providers.length > 0) ? `
+        <div class="series-providers">
+          <div class="series-providers-title">📺 Disponible sur</div>
+          <div class="series-providers-list">
+            ${s.providers.map(p => `
+              <div class="provider-item">
+                ${p.logo ? '<img src="'+p.logo+'" alt="'+p.name+'" class="provider-logo">' : ''}
+                <span class="provider-name">${p.name}</span>
+              </div>`).join('')}
+          </div>
+        </div>` : '<p class="series-no-provider">Aucune plateforme connue en France</p>'}
         <p class="series-overview">${s.overview || ''}</p>
         <div class="series-seasons">${seasonsHtml}</div>
       </div>
@@ -2590,6 +2601,25 @@ async function tmdbSeriesDetails(tmdbId, key) {
   const r = await fetch(url);
   if (!r.ok) throw new Error('TMDB ' + r.status);
   const j = await r.json();
+
+  // Récupérer les plateformes de streaming (France)
+  let providers = [];
+  try {
+    const pr = await fetch(`https://api.themoviedb.org/3/tv/${tmdbId}/watch/providers?api_key=${key}`);
+    if (pr.ok) {
+      const pj = await pr.json();
+      const fr = pj.results && (pj.results['FR'] || pj.results['US'] || Object.values(pj.results)[0]);
+      if (fr) {
+        const flatrate = fr.flatrate || [];
+        const free = fr.free || [];
+        providers = [...flatrate, ...free].map(p => ({
+          name: p.provider_name,
+          logo: p.logo_path ? `https://image.tmdb.org/t/p/w45${p.logo_path}` : '',
+        }));
+      }
+    }
+  } catch(e) {}
+
   return {
     id: 'tv_' + j.id,
     tmdbId: j.id,
@@ -2601,6 +2631,7 @@ async function tmdbSeriesDetails(tmdbId, key) {
     status: j.status || '',
     nbSeasons: j.number_of_seasons || 0,
     nbEpisodes: j.number_of_episodes || 0,
+    providers,
     seasons: (j.seasons || []).filter(s => s.season_number > 0).map(s => ({
       number: s.season_number,
       name: s.name,
