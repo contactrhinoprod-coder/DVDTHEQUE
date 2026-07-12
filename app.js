@@ -2433,13 +2433,23 @@ async function openSeriesDetail(seriesId) {
       </div>
     </div>`;
 
-  const view = $('[data-view="series"]');
-  if (view) {
-    view.innerHTML = html;
-    view.hidden = false;
-    $('#series-grid') && ($('#series-grid').hidden = true);
-    $('#series-empty') && ($('#series-empty').hidden = true);
+  // Afficher le détail dans #series-detail, cacher la liste
+  const seriesGrid = $('#series-grid');
+  const seriesSearchBar = $('#series-searchbar');
+  const seriesEmpty = $('#series-empty');
+  if (seriesGrid) seriesGrid.hidden = true;
+  if (seriesSearchBar) seriesSearchBar.hidden = true;
+  if (seriesEmpty) seriesEmpty.hidden = true;
+
+  let detail = $('#series-detail');
+  if (!detail) {
+    detail = document.createElement('div');
+    detail.id = 'series-detail';
+    const view = $('[data-view="series"]');
+    if (view) view.appendChild(detail);
   }
+  detail.innerHTML = html;
+  detail.hidden = false;
   State.seriesDetailOpen = seriesId;
 }
 
