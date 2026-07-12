@@ -80,6 +80,10 @@
     <!-- Conteneur des vues. Une seule .view est visible à la fois -->
     <!-- Filtres bibliothèque (hors scroll pour sticky Android) -->
     <div id="library-header" hidden>
+      <div class="media-toggle">
+        <button class="media-toggle-btn active" id="toggle-films" data-media="films">🎬 Films</button>
+        <button class="media-toggle-btn" id="toggle-series" data-media="series">📺 Séries</button>
+      </div>
       <div class="format-seg" id="format-seg">
         <button data-fmt="" class="active">Tout</button>
         <button data-fmt="DVD">DVD</button>
@@ -115,6 +119,15 @@
           <div class="empty-icon">🎬</div>
           <p>Votre collection est vide.</p>
           <button class="btn-primary" data-action="add">Ajouter un film</button>
+        </div>
+      </section>
+
+      <!-- ---------- VUE : Séries ---------- -->
+      <section class="view" data-view="series" hidden>
+        <div id="series-grid" class="grid"></div>
+        <div id="series-empty" class="empty-state">
+          <div class="empty-icon">📺</div>
+          <p>Aucune série. Ajoutez-en une avec le bouton ＋.</p>
         </div>
       </section>
 

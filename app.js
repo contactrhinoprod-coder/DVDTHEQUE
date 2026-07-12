@@ -20,6 +20,7 @@ const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 const State = {
+  series: [],
   movies: [],          // cache mémoire de la collection
   view: 'library',
   layout: 'grid',
@@ -2238,6 +2239,7 @@ async function boot() {
 
   bindEvents();
   bindLogin();
+  bindMediaToggle();
 
   // Service worker : zéro cache + auto-update.
   // Quand un nouveau service worker prend le contrôle, on recharge
@@ -2285,6 +2287,74 @@ function showLogin(show) {
   const screen = $('#login-screen'), app = $('#app');
   if (screen) screen.hidden = !show;
   if (app) app.style.display = show ? 'none' : '';
+}
+
+function bindMediaToggle() {
+  const btnFilms = $('#toggle-films');
+  const btnSeries = $('#toggle-series');
+  const formatSeg = $('#format-seg');
+  const toolbar = document.querySelector('.toolbar');
+  const libraryGrid = $('#library-grid');
+  const seriesGrid = $('#series-grid');
+  const seriesEmpty = $('#series-empty');
+  const libraryEmpty = $('#library-empty');
+  const libraryTotal = $('#library-total');
+  const activeFilters = $('#active-filters');
+
+  function showFilms() {
+    btnFilms.classList.add('active');
+    btnSeries.classList.remove('active');
+    if (formatSeg) formatSeg.hidden = false;
+    if (toolbar) toolbar.hidden = false;
+    if (libraryGrid) libraryGrid.hidden = false;
+    if (seriesGrid) seriesGrid.hidden = true;
+    if (seriesEmpty) seriesEmpty.hidden = true;
+    if (activeFilters) activeFilters.hidden = false;
+    State.mediaMode = 'films';
+    renderLibrary();
+  }
+
+  function showSeries() {
+    btnSeries.classList.add('active');
+    btnFilms.classList.remove('active');
+    if (formatSeg) formatSeg.hidden = true;
+    if (toolbar) toolbar.hidden = true;
+    if (libraryGrid) libraryGrid.hidden = true;
+    if (activeFilters) activeFilters.hidden = true;
+    if (libraryTotal) libraryTotal.hidden = true;
+    if (libraryEmpty) libraryEmpty.hidden = true;
+    State.mediaMode = 'series';
+    renderSeries();
+  }
+
+  if (btnFilms) btnFilms.addEventListener('click', showFilms);
+  if (btnSeries) btnSeries.addEventListener('click', showSeries);
+}
+
+function renderSeries() {
+  const grid = $('#series-grid');
+  const empty = $('#series-empty');
+  if (!grid) return;
+  const series = State.series || [];
+  if (series.length === 0) {
+    grid.hidden = true;
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  grid.hidden = false;
+  grid.innerHTML = series.map(s => `
+    <div class="card" data-id="${s.id}" onclick="openSeriesDetail('${s.id}')">
+      <div class="card-poster" style="background-image:url('${s.poster || ''}')">
+        <span class="card-badge">${s.status || 'En cours'}</span>
+      </div>
+      <div class="card-info">
+        <div class="card-title">${s.name}</div>
+        <div class="card-meta">${s.year || ''}</div>
+        <div class="card-progress">${s.episodesSeen || 0} / ${s.episodesTotal || '?'} ep.</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function bindLogin() {
