@@ -691,3 +691,14 @@ html, body {
 .provider-logo { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; }
 .provider-name { font-size: .85rem; font-weight: 600; }
 .series-no-provider { font-size: .82rem; color: var(--text-dim); margin-bottom: 12px; }
+
+#search-toggle { position: relative; }
+#search-toggle.search-active { color: var(--accent); }
+#search-toggle.search-active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px; right: 4px;
+  width: 7px; height: 7px;
+  background: var(--accent);
+  border-radius: 50%;
+}

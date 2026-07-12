@@ -646,6 +646,16 @@ function go(view, opts = {}) {
   // Afficher/masquer le header bibliothèque
   const libHeader = $('#library-header');
   if (libHeader) libHeader.hidden = (view !== 'library');
+
+  // Toujours réafficher les éléments films quand on va sur library
+  if (view === 'library') {
+    const formatSeg = $('#format-seg');
+    const toolbar = document.querySelector('.toolbar');
+    const activeFilters = $('#active-filters');
+    if (formatSeg) formatSeg.hidden = false;
+    if (toolbar) toolbar.hidden = false;
+    if (activeFilters) activeFilters.hidden = false;
+  }
   // Sauvegarder la position avant de quitter library ou wishlist
   if (State.view === 'library' || State.view === 'wishlist') {
     scrollSave[State.view] = $('#views').scrollTop;
@@ -2967,12 +2977,24 @@ function bindEvents() {
     go(m && m.wishlist ? 'wishlist' : 'library');
   });
   $('#search-toggle').addEventListener('click', () => {
-    const sb = $('#searchbar'); sb.hidden = !sb.hidden;
-    if (!sb.hidden) $('#search-input').focus();
+    const sb = $('#searchbar'); 
+    sb.hidden = !sb.hidden;
+    if (!sb.hidden) {
+      $('#search-input').focus();
+      $('#search-toggle').classList.add('search-active');
+    } else {
+      State.search = '';
+      $('#search-input').value = '';
+      $('#search-toggle').classList.remove('search-active');
+      renderLibrary();
+    }
   });
   $('#search-input').addEventListener('input', (e) => {
-    State.search = e.target.value; renderLibrary();
+    State.search = e.target.value;
+    if (State.search) $('#search-toggle').classList.add('search-active');
+    else $('#search-toggle').classList.remove('search-active');
   });
+
 
   // Toolbar
   $$('#layout-seg button').forEach(b => b.addEventListener('click', () => {
