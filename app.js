@@ -2403,13 +2403,16 @@ async function openSeriesDetail(seriesId) {
         </div>
         <div class="series-episodes" hidden>
           ${eps.map(e => `
-            <label class="episode-row">
-              <input type="checkbox" ${s.seenEpisodes['S'+season.number+'E'+e.number] ? 'checked' : ''}
-                onchange="toggleEpisodeSeen('${seriesId}',${season.number},${e.number});updateSeriesDetail('${seriesId}')">
-              <span class="ep-num">E${String(e.number).padStart(2,'0')}</span>
-              <span class="ep-name">${e.name}</span>
-              ${e.runtime ? '<span class="ep-runtime">'+e.runtime+'min</span>' : ''}
-            </label>
+            <div class="episode-item">
+              <label class="episode-row" onclick="event.stopPropagation()">
+                <input type="checkbox" ${s.seenEpisodes['S'+season.number+'E'+e.number] ? 'checked' : ''}
+                  onchange="toggleEpisodeSeen('${seriesId}',${season.number},${e.number});updateSeriesDetail('${seriesId}')">
+                <span class="ep-num">E${String(e.number).padStart(2,'0')}</span>
+                <span class="ep-name" onclick="toggleEpOverview(this)">${e.name}</span>
+                ${e.runtime ? '<span class="ep-runtime">'+e.runtime+'min</span>' : ''}
+              </label>
+              ${e.overview ? '<div class="ep-overview" hidden>'+e.overview+'</div>' : ''}
+            </div>
           `).join('')}
         </div>
       </div>`;
@@ -2459,6 +2462,13 @@ async function openSeriesDetail(seriesId) {
   detail.innerHTML = html;
   detail.hidden = false;
   State.seriesDetailOpen = seriesId;
+}
+
+function toggleEpOverview(nameEl) {
+  const item = nameEl.closest('.episode-item');
+  if (!item) return;
+  const overview = item.querySelector('.ep-overview');
+  if (overview) overview.hidden = !overview.hidden;
 }
 
 function toggleSeason(header) {

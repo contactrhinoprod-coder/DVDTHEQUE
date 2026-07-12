@@ -664,3 +664,13 @@ html, body {
   flex-shrink: 0;
 }
 .season-all-btn:active { opacity: .8; }
+
+.episode-item { border-bottom: 1px solid var(--border); }
+.episode-item:last-child { border-bottom: none; }
+.episode-row { border-bottom: none; }
+.ep-name { cursor: pointer; text-decoration: underline dotted; }
+.ep-overview {
+  padding: 8px 16px 12px 46px;
+  font-size: .82rem; color: var(--text-dim);
+  line-height: 1.5;
+}
