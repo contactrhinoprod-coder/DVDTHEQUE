@@ -2687,12 +2687,11 @@ function showSeries() {
   if (btnSeries) btnSeries.classList.add('active');
   if (btnFilms) btnFilms.classList.remove('active');
 
-  // Cacher éléments films
-  ['#format-seg','#library-grid','#library-total','#library-empty','#active-filters'].forEach(id => {
-    const el = $(id); if (el) el.hidden = true;
-  });
+  // Ne pas cacher les éléments individuels - la vue entière sera cachée par go()
   const toolbar = document.querySelector('.toolbar');
   if (toolbar) toolbar.hidden = true;
+  const formatSeg = $('#format-seg');
+  if (formatSeg) formatSeg.hidden = true;
 
   // State
   State.mediaMode = 'series';
