@@ -2759,19 +2759,23 @@ function showSeries() {
   const seriesView = $('[data-view="series"]');
   if (seriesView) {
     seriesView.hidden = false;
-    // S'assurer que series-grid et series-empty sont dans la vue
-    if (!$('#series-grid')) {
-      const grid = document.createElement('div');
-      grid.id = 'series-grid';
-      seriesView.insertBefore(grid, seriesView.firstChild);
-    }
-    if (!$('#series-empty')) {
-      const empty = document.createElement('div');
-      empty.id = 'series-empty';
-      empty.className = 'empty-state';
-      empty.innerHTML = '<div class="empty-icon">📺</div><p>Aucune série. Ajoutez-en une avec le bouton ＋.</p>';
-      seriesView.appendChild(empty);
-    }
+    // Reconstruire toujours le contenu de la vue séries
+    seriesView.innerHTML = `
+      <div id="series-searchbar">
+        <input type="search" id="series-search-input" placeholder="🔍 Rechercher une série…" autocomplete="off">
+      </div>
+      <div id="series-status-filter">
+        <button class="status-filter-btn active" data-status="">Tout</button>
+        <button class="status-filter-btn" data-status="watching">▶ En cours</button>
+        <button class="status-filter-btn" data-status="completed">✅ Terminé</button>
+        <button class="status-filter-btn" data-status="plantowatch">🔖 À voir</button>
+        <button class="status-filter-btn" data-status="dropped">❌ Abandonné</button>
+      </div>
+      <div id="series-grid" class="grid"></div>
+      <div id="series-empty" class="empty-state" hidden>
+        <div class="empty-icon">📺</div>
+        <p>Aucune série. Ajoutez-en une avec le bouton ＋.</p>
+      </div>`;
   }
 
   // Topbar
