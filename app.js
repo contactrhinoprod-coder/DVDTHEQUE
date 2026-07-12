@@ -2719,6 +2719,11 @@ function showSeries() {
   // Tabbar
   switchTabbar('series');
 
+  // Cacher le détail si ouvert
+  const detail = $('#series-detail');
+  if (detail) detail.hidden = true;
+  State.seriesSearch = '';
+
   renderSeries();
 }
 
