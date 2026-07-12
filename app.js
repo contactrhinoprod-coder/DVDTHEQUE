@@ -2996,6 +2996,10 @@ function bindEvents() {
     State.search = e.target.value;
     if (State.search) $('#search-toggle').classList.add('search-active');
     else $('#search-toggle').classList.remove('search-active');
+    renderLibrary();
+  });
+  $('#search-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.target.blur(); renderLibrary(); }
   });
 
 
