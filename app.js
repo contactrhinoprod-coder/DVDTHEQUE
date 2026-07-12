@@ -247,61 +247,6 @@ const MovieAPI = (() => {
     } catch (e) { console.warn('searchMulti:', e); return []; }
   }
 
-  // ── TMDB Séries ──────────────────────────────────────────
-  async function tmdbSearchSeries(title, key) {
-    const url = `https://api.themoviedb.org/3/search/tv?api_key=${key}&query=${encodeURIComponent(title)}&language=fr-FR`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('TMDB ' + r.status);
-    const j = await r.json();
-    return (j.results || []).slice(0, 8).map(s => ({
-      id: 'tv_' + s.id,
-      tmdbId: s.id,
-      name: s.name,
-      year: s.first_air_date ? s.first_air_date.slice(0, 4) : '',
-      poster: s.poster_path ? `https://image.tmdb.org/t/p/w185${s.poster_path}` : '',
-      overview: s.overview || '',
-    }));
-  }
-
-  async function tmdbSeriesDetails(tmdbId, key) {
-    const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${key}&language=fr-FR`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('TMDB ' + r.status);
-    const j = await r.json();
-    return {
-      id: 'tv_' + j.id,
-      tmdbId: j.id,
-      name: j.name,
-      year: j.first_air_date ? j.first_air_date.slice(0, 4) : '',
-      poster: j.poster_path ? `https://image.tmdb.org/t/p/w500${j.poster_path}` : '',
-      overview: j.overview || '',
-      genres: (j.genres || []).map(g => g.name),
-      status: j.status || '',
-      nbSeasons: j.number_of_seasons || 0,
-      nbEpisodes: j.number_of_episodes || 0,
-      seasons: (j.seasons || []).filter(s => s.season_number > 0).map(s => ({
-        number: s.season_number,
-        name: s.name,
-        episodeCount: s.episode_count,
-        poster: s.poster_path ? `https://image.tmdb.org/t/p/w185${s.poster_path}` : '',
-      })),
-    };
-  }
-
-  async function tmdbSeasonDetails(tmdbId, seasonNum, key) {
-    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNum}?api_key=${key}&language=fr-FR`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('TMDB ' + r.status);
-    const j = await r.json();
-    return (j.episodes || []).map(e => ({
-      number: e.episode_number,
-      name: e.name,
-      overview: e.overview || '',
-      airDate: e.air_date || '',
-      runtime: e.runtime || 0,
-    }));
-  }
-
   // Détails complets d'un film à partir de son id TMDB
   async function getDetails(id) {
     const { apiKey } = State.settings;
@@ -2580,6 +2525,61 @@ async function selectSeriesResult(idx) {
   } catch(e) {
     alert('Erreur : ' + e.message);
   }
+}
+
+// ── TMDB Séries (fonctions globales) ─────────────────────────
+async function tmdbSearchSeries(title, key) {
+  const url = `https://api.themoviedb.org/3/search/tv?api_key=${key}&query=${encodeURIComponent(title)}&language=fr-FR`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('TMDB ' + r.status);
+  const j = await r.json();
+  return (j.results || []).slice(0, 8).map(s => ({
+    id: 'tv_' + s.id,
+    tmdbId: s.id,
+    name: s.name,
+    year: s.first_air_date ? s.first_air_date.slice(0, 4) : '',
+    poster: s.poster_path ? `https://image.tmdb.org/t/p/w185${s.poster_path}` : '',
+    overview: s.overview || '',
+  }));
+}
+
+async function tmdbSeriesDetails(tmdbId, key) {
+  const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${key}&language=fr-FR`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('TMDB ' + r.status);
+  const j = await r.json();
+  return {
+    id: 'tv_' + j.id,
+    tmdbId: j.id,
+    name: j.name,
+    year: j.first_air_date ? j.first_air_date.slice(0, 4) : '',
+    poster: j.poster_path ? `https://image.tmdb.org/t/p/w500${j.poster_path}` : '',
+    overview: j.overview || '',
+    genres: (j.genres || []).map(g => g.name),
+    status: j.status || '',
+    nbSeasons: j.number_of_seasons || 0,
+    nbEpisodes: j.number_of_episodes || 0,
+    seasons: (j.seasons || []).filter(s => s.season_number > 0).map(s => ({
+      number: s.season_number,
+      name: s.name,
+      episodeCount: s.episode_count,
+      poster: s.poster_path ? `https://image.tmdb.org/t/p/w185${s.poster_path}` : '',
+    })),
+  };
+}
+
+async function tmdbSeasonDetails(tmdbId, seasonNum, key) {
+  const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNum}?api_key=${key}&language=fr-FR`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('TMDB ' + r.status);
+  const j = await r.json();
+  return (j.episodes || []).map(e => ({
+    number: e.episode_number,
+    name: e.name,
+    overview: e.overview || '',
+    airDate: e.air_date || '',
+    runtime: e.runtime || 0,
+  }));
 }
 
 function showSeriesStats() {
