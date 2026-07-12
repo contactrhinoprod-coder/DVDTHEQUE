@@ -627,9 +627,13 @@ function go(view, opts = {}) {
   if (view === 'series-stats') { showSeriesStats && showSeriesStats(); return; }
 
   // Si on revient sur une vue films depuis le mode séries, reswitcher
-  if (State.mediaMode === 'series' && view !== 'series-list' && view !== 'series-stats') {
+  if (State.mediaMode === 'series') {
     State.mediaMode = 'films';
     switchTabbar('films');
+    const btnFilms = $('#toggle-films');
+    const btnSeries = $('#toggle-series');
+    if (btnFilms) btnFilms.classList.add('active');
+    if (btnSeries) btnSeries.classList.remove('active');
   }
 
   // Afficher/masquer le header bibliothèque
@@ -2655,21 +2659,9 @@ function showFilms() {
   const btnSeries = $('#toggle-series');
   if (btnFilms) btnFilms.classList.add('active');
   if (btnSeries) btnSeries.classList.remove('active');
-  const formatSeg = $('#format-seg');
-  const toolbar = document.querySelector('.toolbar');
-  const libraryGrid = $('#library-grid');
-  const seriesGrid = $('#series-grid');
-  const seriesEmpty = $('#series-empty');
-  const activeFilters = $('#active-filters');
-  if (formatSeg) formatSeg.hidden = false;
-  if (toolbar) toolbar.hidden = false;
-  if (libraryGrid) libraryGrid.hidden = false;
-  if (seriesGrid) seriesGrid.hidden = true;
-  if (seriesEmpty) seriesEmpty.hidden = true;
-  if (activeFilters) activeFilters.hidden = false;
   State.mediaMode = 'films';
   switchTabbar('films');
-  renderLibrary();
+  go('library');
 }
 
 function showSeries() {
