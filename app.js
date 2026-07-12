@@ -626,6 +626,12 @@ function go(view, opts = {}) {
   if (view === 'series-search') { showAddSeriesModal && showAddSeriesModal(); return; }
   if (view === 'series-stats') { showSeriesStats && showSeriesStats(); return; }
 
+  // Si on revient sur une vue films depuis le mode séries, reswitcher
+  if (State.mediaMode === 'series' && view !== 'series-list' && view !== 'series-stats') {
+    State.mediaMode = 'films';
+    switchTabbar('films');
+  }
+
   // Afficher/masquer le header bibliothèque
   const libHeader = $('#library-header');
   if (libHeader) libHeader.hidden = (view !== 'library');
@@ -2685,6 +2691,13 @@ function showSeries() {
   if (libraryEmpty) libraryEmpty.hidden = true;
   State.mediaMode = 'series';
   switchTabbar('series');
+  // Afficher la vue séries et cacher les autres
+  $$('.view').forEach(v => v.hidden = true);
+  const seriesView = $('[data-view="series"]');
+  if (seriesView) seriesView.hidden = false;
+  $('#topbar-title').textContent = 'Séries';
+  $('#back-btn').hidden = true;
+  $('#search-toggle').hidden = true;
   renderSeries();
 }
 
