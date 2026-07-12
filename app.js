@@ -2810,6 +2810,9 @@ function renderSeries() {
     noAccent(s.name).includes(q) ||
     noAccent((s.genres||[]).join(' ')).includes(q)
   );
+  if (State.seriesStatusFilter) {
+    series = series.filter(s => s.watchStatus === State.seriesStatusFilter);
+  }
 
   if (series.length === 0) {
     grid.hidden = true;

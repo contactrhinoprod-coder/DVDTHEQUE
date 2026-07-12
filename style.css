@@ -702,3 +702,27 @@ html, body {
   background: var(--accent);
   border-radius: 50%;
 }
+
+#series-searchbar {
+  padding: 8px 12px; background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+#series-search-input {
+  width: 100%; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 1rem; outline: none;
+}
+#series-status-filter {
+  display: flex; gap: 6px; padding: 8px 12px;
+  overflow-x: auto; scrollbar-width: none;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+#series-status-filter::-webkit-scrollbar { display: none; }
+.status-filter-btn {
+  flex-shrink: 0; padding: 6px 14px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-dim); font-size: .82rem; cursor: pointer; white-space: nowrap;
+}
+.status-filter-btn.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
