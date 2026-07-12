@@ -676,6 +676,11 @@ const AudioRecorder = (() => {
 const scrollSave = { library: 0, wishlist: 0 };
 
 function go(view, opts = {}) {
+  // Gérer les vues séries
+  if (view === 'series-list') { showSeries && showSeries(); return; }
+  if (view === 'series-search') { showAddSeriesModal && showAddSeriesModal(); return; }
+  if (view === 'series-stats') { showSeriesStats && showSeriesStats(); return; }
+
   // Afficher/masquer le header bibliothèque
   const libHeader = $('#library-header');
   if (libHeader) libHeader.hidden = (view !== 'library');
@@ -2451,7 +2456,7 @@ async function openSeriesDetail(seriesId) {
     <div class="series-detail">
       <div class="series-detail-header" style="background-image:url('${s.poster}')">
         <div class="series-detail-overlay">
-          <button class="btn-ghost" onclick="go('library')" style="color:#fff">← Retour</button>
+          <button class="btn-ghost" onclick="showSeries()" style="color:#fff">← Retour</button>
           <button class="btn-ghost danger" onclick="if(confirm('Supprimer cette série ?'))removeSeries('${seriesId}')" style="float:right">🗑</button>
         </div>
       </div>
@@ -2575,6 +2580,55 @@ async function selectSeriesResult(idx) {
   } catch(e) {
     alert('Erreur : ' + e.message);
   }
+}
+
+function showSeriesStats() {
+  const series = State.series || [];
+  const totalSeries = series.length;
+  const completed = series.filter(s => s.watchStatus === 'completed').length;
+  const watching = series.filter(s => s.watchStatus === 'watching').length;
+  const plantowatch = series.filter(s => s.watchStatus === 'plantowatch').length;
+  const dropped = series.filter(s => s.watchStatus === 'dropped').length;
+  const totalEp = series.reduce((acc, s) => acc + (s.episodesSeen || 0), 0);
+
+  const view = $('[data-view="series"]');
+  if (!view) return;
+  view.innerHTML = `
+    <div style="padding:20px">
+      <h2 style="margin-bottom:20px">📊 Mes stats séries</h2>
+      <div class="stats-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+        <div class="stat-card" style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${totalSeries}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Séries</div>
+        </div>
+        <div class="stat-card" style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${totalEp}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Épisodes vus</div>
+        </div>
+        <div class="stat-card" style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:#22c55e">${completed}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Terminées</div>
+        </div>
+        <div class="stat-card" style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:#3b82f6">${watching}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">En cours</div>
+        </div>
+        <div class="stat-card" style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:#f59e0b">${plantowatch}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">À voir</div>
+        </div>
+        <div class="stat-card" style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:#ef4444">${dropped}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Abandonnées</div>
+        </div>
+      </div>
+    </div>`;
+  view.hidden = false;
+  $('#series-grid') && ($('#series-grid').hidden = true);
+  $('#series-empty') && ($('#series-empty').hidden = true);
+  document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
+  const statsTab = document.querySelector('[data-go="series-stats"]');
+  if (statsTab) statsTab.classList.add('active');
 }
 
 function bindMediaToggle() {
