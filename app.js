@@ -634,6 +634,13 @@ function go(view, opts = {}) {
     const btnSeries = $('#toggle-series');
     if (btnFilms) btnFilms.classList.add('active');
     if (btnSeries) btnSeries.classList.remove('active');
+    // Réafficher les éléments films cachés par showSeries
+    const formatSeg = $('#format-seg');
+    const toolbar = document.querySelector('.toolbar');
+    const activeFilters = $('#active-filters');
+    if (formatSeg) formatSeg.hidden = false;
+    if (toolbar) toolbar.hidden = false;
+    if (activeFilters) activeFilters.hidden = false;
   }
 
   // Afficher/masquer le header bibliothèque
