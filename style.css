@@ -649,3 +649,18 @@ html, body {
 #series-grid .card-progress {
   font-size: .75rem; color: var(--accent); font-weight: 600;
 }
+
+.series-season-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.season-check { font-size: 1.1rem; flex-shrink: 0; }
+.season-title { font-weight: 700; flex: 1; }
+.season-progress { color: var(--accent); font-size: .85rem; font-weight: 600; }
+.season-all-btn {
+  background: var(--surface-2); border: none; color: var(--text-dim);
+  font-size: .78rem; padding: 4px 10px; border-radius: 8px; cursor: pointer;
+  flex-shrink: 0;
+}
+.season-all-btn:active { opacity: .8; }

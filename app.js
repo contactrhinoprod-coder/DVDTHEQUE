@@ -2389,25 +2389,26 @@ async function openSeriesDetail(seriesId) {
 
   const seasonsHtml = (s.seasons || []).map(season => {
     const eps = season.episodes || [];
-    const seenInSeason = eps.filter(e => s.seenEpisodes[`S${season.number}E${e.number}`]).length;
+    const seenInSeason = eps.filter(e => s.seenEpisodes['S'+season.number+'E'+e.number]).length;
     const allSeen = seenInSeason === eps.length && eps.length > 0;
     return `
       <div class="series-season">
         <div class="series-season-header" onclick="toggleSeason(this)">
-          <span>Saison ${season.number} — ${season.name}</span>
+          <span class="season-check">${allSeen ? '✅' : '⬜'}</span>
+          <span class="season-title">Saison ${season.number}</span>
           <span class="season-progress">${seenInSeason}/${eps.length}</span>
-          <button class="btn-ghost season-all-btn" onclick="event.stopPropagation();markSeasonAll('${seriesId}',${season.number},${!allSeen})" style="font-size:.8rem;padding:4px 8px">
+          <button class="season-all-btn" onclick="event.stopPropagation();markSeasonAll('${seriesId}',${season.number},${!allSeen})">
             ${allSeen ? 'Tout décocher' : 'Tout cocher'}
           </button>
         </div>
         <div class="series-episodes" hidden>
           ${eps.map(e => `
             <label class="episode-row">
-              <input type="checkbox" ${s.seenEpisodes[`S${season.number}E${e.number}`] ? 'checked' : ''}
+              <input type="checkbox" ${s.seenEpisodes['S'+season.number+'E'+e.number] ? 'checked' : ''}
                 onchange="toggleEpisodeSeen('${seriesId}',${season.number},${e.number});updateSeriesDetail('${seriesId}')">
-              <span class="ep-num">S${season.number}E${String(e.number).padStart(2,'0')}</span>
+              <span class="ep-num">E${String(e.number).padStart(2,'0')}</span>
               <span class="ep-name">${e.name}</span>
-              ${e.runtime ? `<span class="ep-runtime">${e.runtime}min</span>` : ''}
+              ${e.runtime ? '<span class="ep-runtime">'+e.runtime+'min</span>' : ''}
             </label>
           `).join('')}
         </div>
