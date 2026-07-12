@@ -2411,8 +2411,7 @@ async function openSeriesDetail(seriesId) {
     <div class="series-detail">
       <div class="series-detail-header" style="background-image:url('${s.poster}')">
         <div class="series-detail-overlay">
-          <button class="btn-ghost" onclick="showSeries()" style="color:#fff">← Retour</button>
-          <button class="btn-ghost danger" onclick="if(confirm('Supprimer cette série ?'))removeSeries('${seriesId}')" style="float:right">🗑</button>
+
         </div>
       </div>
       <div class="series-detail-body">
@@ -2665,31 +2664,51 @@ function showFilms() {
 }
 
 function showSeries() {
+  // Toggle boutons
   const btnFilms = $('#toggle-films');
   const btnSeries = $('#toggle-series');
   if (btnSeries) btnSeries.classList.add('active');
   if (btnFilms) btnFilms.classList.remove('active');
-  const formatSeg = $('#format-seg');
+
+  // Cacher éléments films
+  ['#format-seg','#library-grid','#library-total','#library-empty','#active-filters'].forEach(id => {
+    const el = $(id); if (el) el.hidden = true;
+  });
   const toolbar = document.querySelector('.toolbar');
-  const libraryGrid = $('#library-grid');
-  const libraryTotal = $('#library-total');
-  const libraryEmpty = $('#library-empty');
-  const activeFilters = $('#active-filters');
-  if (formatSeg) formatSeg.hidden = true;
   if (toolbar) toolbar.hidden = true;
-  if (libraryGrid) libraryGrid.hidden = true;
-  if (activeFilters) activeFilters.hidden = true;
-  if (libraryTotal) libraryTotal.hidden = true;
-  if (libraryEmpty) libraryEmpty.hidden = true;
+
+  // State
   State.mediaMode = 'series';
-  switchTabbar('series');
-  // Afficher la vue séries et cacher les autres
+  State.view = 'series';
+
+  // Afficher vue séries
   $$('.view').forEach(v => v.hidden = true);
   const seriesView = $('[data-view="series"]');
-  if (seriesView) seriesView.hidden = false;
+  if (seriesView) {
+    seriesView.hidden = false;
+    // S'assurer que series-grid et series-empty sont dans la vue
+    if (!$('#series-grid')) {
+      const grid = document.createElement('div');
+      grid.id = 'series-grid';
+      seriesView.insertBefore(grid, seriesView.firstChild);
+    }
+    if (!$('#series-empty')) {
+      const empty = document.createElement('div');
+      empty.id = 'series-empty';
+      empty.className = 'empty-state';
+      empty.innerHTML = '<div class="empty-icon">📺</div><p>Aucune série. Ajoutez-en une avec le bouton ＋.</p>';
+      seriesView.appendChild(empty);
+    }
+  }
+
+  // Topbar
   $('#topbar-title').textContent = 'Séries';
   $('#back-btn').hidden = true;
   $('#search-toggle').hidden = true;
+
+  // Tabbar
+  switchTabbar('series');
+
   renderSeries();
 }
 
