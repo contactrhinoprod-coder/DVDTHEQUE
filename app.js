@@ -2631,64 +2631,68 @@ function showSeriesStats() {
   if (statsTab) statsTab.classList.add('active');
 }
 
-function bindMediaToggle() {
+function switchTabbar(mode) {
+  document.querySelectorAll('.tab-films').forEach(t => t.hidden = (mode === 'series'));
+  document.querySelectorAll('.tab-series').forEach(t => t.hidden = (mode === 'films'));
+  document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
+  if (mode === 'films') {
+    const libTab = document.querySelector('[data-go="library"]');
+    if (libTab) libTab.classList.add('active');
+  } else {
+    const seriesTab = document.querySelector('[data-go="series-list"]');
+    if (seriesTab) seriesTab.classList.add('active');
+  }
+}
+
+function showFilms() {
   const btnFilms = $('#toggle-films');
   const btnSeries = $('#toggle-series');
+  if (btnFilms) btnFilms.classList.add('active');
+  if (btnSeries) btnSeries.classList.remove('active');
   const formatSeg = $('#format-seg');
   const toolbar = document.querySelector('.toolbar');
   const libraryGrid = $('#library-grid');
   const seriesGrid = $('#series-grid');
   const seriesEmpty = $('#series-empty');
-  const libraryEmpty = $('#library-empty');
-  const libraryTotal = $('#library-total');
   const activeFilters = $('#active-filters');
+  if (formatSeg) formatSeg.hidden = false;
+  if (toolbar) toolbar.hidden = false;
+  if (libraryGrid) libraryGrid.hidden = false;
+  if (seriesGrid) seriesGrid.hidden = true;
+  if (seriesEmpty) seriesEmpty.hidden = true;
+  if (activeFilters) activeFilters.hidden = false;
+  State.mediaMode = 'films';
+  switchTabbar('films');
+  renderLibrary();
+}
 
-  function switchTabbar(mode) {
-    document.querySelectorAll('.tab-films').forEach(t => t.hidden = (mode === 'series'));
-    document.querySelectorAll('.tab-series').forEach(t => t.hidden = (mode === 'films'));
-    // Réinitialiser onglet actif
-    document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
-    if (mode === 'films') {
-      const libTab = document.querySelector('[data-go="library"]');
-      if (libTab) libTab.classList.add('active');
-    } else {
-      const seriesTab = document.querySelector('[data-go="series-list"]');
-      if (seriesTab) seriesTab.classList.add('active');
-    }
-  }
+function showSeries() {
+  const btnFilms = $('#toggle-films');
+  const btnSeries = $('#toggle-series');
+  if (btnSeries) btnSeries.classList.add('active');
+  if (btnFilms) btnFilms.classList.remove('active');
+  const formatSeg = $('#format-seg');
+  const toolbar = document.querySelector('.toolbar');
+  const libraryGrid = $('#library-grid');
+  const libraryTotal = $('#library-total');
+  const libraryEmpty = $('#library-empty');
+  const activeFilters = $('#active-filters');
+  if (formatSeg) formatSeg.hidden = true;
+  if (toolbar) toolbar.hidden = true;
+  if (libraryGrid) libraryGrid.hidden = true;
+  if (activeFilters) activeFilters.hidden = true;
+  if (libraryTotal) libraryTotal.hidden = true;
+  if (libraryEmpty) libraryEmpty.hidden = true;
+  State.mediaMode = 'series';
+  switchTabbar('series');
+  renderSeries();
+}
 
-  function showFilms() {
-    btnFilms.classList.add('active');
-    btnSeries.classList.remove('active');
-    if (formatSeg) formatSeg.hidden = false;
-    if (toolbar) toolbar.hidden = false;
-    if (libraryGrid) libraryGrid.hidden = false;
-    if (seriesGrid) seriesGrid.hidden = true;
-    if (seriesEmpty) seriesEmpty.hidden = true;
-    if (activeFilters) activeFilters.hidden = false;
-    State.mediaMode = 'films';
-    switchTabbar('films');
-    renderLibrary();
-  }
-
-  function showSeries() {
-    btnSeries.classList.add('active');
-    btnFilms.classList.remove('active');
-    if (formatSeg) formatSeg.hidden = true;
-    if (toolbar) toolbar.hidden = true;
-    if (libraryGrid) libraryGrid.hidden = true;
-    if (activeFilters) activeFilters.hidden = true;
-    if (libraryTotal) libraryTotal.hidden = true;
-    if (libraryEmpty) libraryEmpty.hidden = true;
-    State.mediaMode = 'series';
-    switchTabbar('series');
-    renderSeries();
-  }
-
+function bindMediaToggle() {
+  const btnFilms = $('#toggle-films');
+  const btnSeries = $('#toggle-series');
   if (btnFilms) btnFilms.addEventListener('click', showFilms);
   if (btnSeries) btnSeries.addEventListener('click', showSeries);
-
-  // Charger les séries au démarrage
   loadSeries();
 }
 
@@ -2828,7 +2832,10 @@ async function cloudSignOut() {
 function bindEvents() {
   // Tabs
   $$('.tab[data-go]').forEach(t => t.addEventListener('click', () => go(t.dataset.go)));
-  $('#add-tab').addEventListener('click', startImportFlow);
+  $('#add-tab').addEventListener('click', () => {
+    if (State.mediaMode === 'series') showAddSeriesModal();
+    else startImportFlow();
+  });
 
   // Topbar
   $('#back-btn').addEventListener('click', () => {
@@ -2860,7 +2867,10 @@ function bindEvents() {
   // Add sheet
   $('#sheet-backdrop').addEventListener('click', closeSheet);
   $('#act-cancel').addEventListener('click', closeSheet);
-  $('#act-import').addEventListener('click', startImportFlow);
+  $('#act-import').addEventListener('click', () => {
+    if (State.mediaMode === 'series') showAddSeriesModal();
+    else startImportFlow();
+  });
   $('[data-action="add"]')?.addEventListener('click', () => {
     if (State.mediaMode === 'series') showAddSeriesModal();
     else startImportFlow();
