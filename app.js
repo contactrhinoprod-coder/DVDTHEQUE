@@ -2408,7 +2408,7 @@ async function openSeriesDetail(seriesId) {
                 <input type="checkbox" ${s.seenEpisodes['S'+season.number+'E'+e.number] ? 'checked' : ''}
                   onchange="toggleEpisodeSeen('${seriesId}',${season.number},${e.number});updateSeriesDetail('${seriesId}')">
                 <span class="ep-num">E${String(e.number).padStart(2,'0')}</span>
-                <span class="ep-name" onclick="toggleEpOverview(this)">${e.name}</span>
+                <span class="ep-name" onclick="event.preventDefault();event.stopPropagation();toggleEpOverview(this)">${e.name}</span>
                 ${e.runtime ? '<span class="ep-runtime">'+e.runtime+'min</span>' : ''}
               </label>
               ${e.overview ? '<div class="ep-overview" hidden>'+e.overview+'</div>' : ''}
@@ -2468,7 +2468,12 @@ function toggleEpOverview(nameEl) {
   const item = nameEl.closest('.episode-item');
   if (!item) return;
   const overview = item.querySelector('.ep-overview');
-  if (overview) overview.hidden = !overview.hidden;
+  if (!overview) return;
+  const isHidden = overview.hidden;
+  // Fermer tous les autres synopsis ouverts
+  document.querySelectorAll('.ep-overview').forEach(o => o.hidden = true);
+  // Ouvrir celui-ci seulement si il était fermé
+  overview.hidden = !isHidden;
 }
 
 function toggleSeason(header) {
