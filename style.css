@@ -598,3 +598,54 @@ html, body {
 .media-toggle-btn:first-child { border-radius: 12px 0 0 12px; }
 .media-toggle-btn:last-child { border-radius: 0 12px 12px 0; }
 .media-toggle-btn.active { background: var(--accent); color: #fff; }
+
+/* ---------------- Séries ---------------- */
+.series-picker-item {
+  display: flex; gap: 12px; align-items: center;
+  padding: 12px; border-radius: 12px; cursor: pointer;
+  background: var(--surface); margin-bottom: 8px;
+}
+.series-picker-item:active { opacity: .8; }
+
+.series-detail { padding-bottom: calc(var(--tabbar-h) + 80px); }
+.series-detail-header {
+  height: 220px; background-size: cover; background-position: center;
+  position: relative; border-radius: 0 0 20px 20px;
+}
+.series-detail-overlay {
+  position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,.5), rgba(0,0,0,.1));
+  padding: 16px; border-radius: 0 0 20px 20px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+}
+.series-detail-body { padding: 16px; }
+.series-status-row { display: flex; gap: 12px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+.series-progress-bar {
+  height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin: 12px 0 4px;
+}
+.series-progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+.series-progress-text { font-size: .85rem; color: var(--text-dim); margin-bottom: 12px; }
+.series-overview { color: var(--text-dim); font-size: .9rem; line-height: 1.5; margin-bottom: 20px; }
+
+.series-season { border-radius: 12px; background: var(--surface); margin-bottom: 10px; overflow: hidden; }
+.series-season-header {
+  display: flex; align-items: center; gap: 8px; padding: 14px 16px;
+  cursor: pointer; font-weight: 600;
+}
+.season-progress { margin-left: auto; color: var(--accent); font-size: .85rem; }
+.series-episodes { padding: 0 12px 12px; }
+.episode-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 4px; border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.episode-row:last-child { border-bottom: none; }
+.episode-row input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+.ep-num { font-size: .8rem; color: var(--accent); font-weight: 700; flex-shrink: 0; min-width: 52px; }
+.ep-name { flex: 1; font-size: .9rem; }
+.ep-runtime { font-size: .75rem; color: var(--text-dim); flex-shrink: 0; }
+
+.series-rating span { color: var(--star); }
+
+#series-grid .card-progress {
+  font-size: .75rem; color: var(--accent); font-weight: 600;
+}

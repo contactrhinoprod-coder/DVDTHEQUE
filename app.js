@@ -247,6 +247,61 @@ const MovieAPI = (() => {
     } catch (e) { console.warn('searchMulti:', e); return []; }
   }
 
+  // ── TMDB Séries ──────────────────────────────────────────
+  async function tmdbSearchSeries(title, key) {
+    const url = `https://api.themoviedb.org/3/search/tv?api_key=${key}&query=${encodeURIComponent(title)}&language=fr-FR`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('TMDB ' + r.status);
+    const j = await r.json();
+    return (j.results || []).slice(0, 8).map(s => ({
+      id: 'tv_' + s.id,
+      tmdbId: s.id,
+      name: s.name,
+      year: s.first_air_date ? s.first_air_date.slice(0, 4) : '',
+      poster: s.poster_path ? `https://image.tmdb.org/t/p/w185${s.poster_path}` : '',
+      overview: s.overview || '',
+    }));
+  }
+
+  async function tmdbSeriesDetails(tmdbId, key) {
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${key}&language=fr-FR`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('TMDB ' + r.status);
+    const j = await r.json();
+    return {
+      id: 'tv_' + j.id,
+      tmdbId: j.id,
+      name: j.name,
+      year: j.first_air_date ? j.first_air_date.slice(0, 4) : '',
+      poster: j.poster_path ? `https://image.tmdb.org/t/p/w500${j.poster_path}` : '',
+      overview: j.overview || '',
+      genres: (j.genres || []).map(g => g.name),
+      status: j.status || '',
+      nbSeasons: j.number_of_seasons || 0,
+      nbEpisodes: j.number_of_episodes || 0,
+      seasons: (j.seasons || []).filter(s => s.season_number > 0).map(s => ({
+        number: s.season_number,
+        name: s.name,
+        episodeCount: s.episode_count,
+        poster: s.poster_path ? `https://image.tmdb.org/t/p/w185${s.poster_path}` : '',
+      })),
+    };
+  }
+
+  async function tmdbSeasonDetails(tmdbId, seasonNum, key) {
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNum}?api_key=${key}&language=fr-FR`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('TMDB ' + r.status);
+    const j = await r.json();
+    return (j.episodes || []).map(e => ({
+      number: e.episode_number,
+      name: e.name,
+      overview: e.overview || '',
+      airDate: e.air_date || '',
+      runtime: e.runtime || 0,
+    }));
+  }
+
   // Détails complets d'un film à partir de son id TMDB
   async function getDetails(id) {
     const { apiKey } = State.settings;
@@ -2289,6 +2344,239 @@ function showLogin(show) {
   if (app) app.style.display = show ? 'none' : '';
 }
 
+// ── Store Séries ─────────────────────────────────────────────
+function seriesKey() { return 'dvd_series_' + (Cloud.uid ? Cloud.uid() : 'local'); }
+
+function loadSeries() {
+  try { State.series = JSON.parse(localStorage.getItem(seriesKey()) || '[]'); }
+  catch(e) { State.series = []; }
+}
+
+function saveSeries() {
+  localStorage.setItem(seriesKey(), JSON.stringify(State.series));
+  if (Cloud.enabled && Cloud.enabled()) {
+    Cloud.pushSeries && Cloud.pushSeries(State.series);
+  }
+}
+
+function addSeries(s) {
+  if (State.series.find(x => x.id === s.id)) return;
+  s.addedAt = Date.now();
+  s.watchStatus = 'watching'; // watching | completed | dropped | plantowatch
+  s.seenEpisodes = {}; // { "S1E1": true, ... }
+  s.rating = 0;
+  State.series.push(s);
+  saveSeries();
+  renderSeries();
+}
+
+function removeSeries(id) {
+  State.series = State.series.filter(s => s.id !== id);
+  saveSeries();
+  renderSeries();
+}
+
+function toggleEpisodeSeen(seriesId, season, episode) {
+  const s = State.series.find(x => x.id === seriesId);
+  if (!s) return;
+  const key = `S${season}E${episode}`;
+  s.seenEpisodes = s.seenEpisodes || {};
+  s.seenEpisodes[key] = !s.seenEpisodes[key];
+  // Calculer progression
+  const total = s.seasons ? s.seasons.reduce((acc, ss) => acc + ss.episodeCount, 0) : 0;
+  const seen = Object.values(s.seenEpisodes).filter(Boolean).length;
+  s.episodesSeen = seen;
+  s.episodesTotal = total;
+  // Auto-compléter statut
+  if (seen >= total && total > 0) s.watchStatus = 'completed';
+  else if (seen > 0) s.watchStatus = 'watching';
+  saveSeries();
+}
+
+const SERIES_STATUS = {
+  watching:    '▶ En cours',
+  completed:   '✅ Terminé',
+  dropped:     '❌ Abandonné',
+  plantowatch: '🔖 À voir',
+};
+
+async function openSeriesDetail(seriesId) {
+  const s = State.series.find(x => x.id === seriesId);
+  if (!s) return;
+  const apiKey = State.settings.apiKey;
+
+  // Charger les saisons si pas encore chargées
+  if (s.seasons && s.seasons.length > 0 && !s.seasons[0].episodes) {
+    toast('Chargement des épisodes…');
+    for (const season of s.seasons) {
+      try {
+        season.episodes = await tmdbSeasonDetails(s.tmdbId, season.number, apiKey);
+      } catch(e) { season.episodes = []; }
+    }
+    saveSeries();
+  }
+
+  const seen = Object.values(s.seenEpisodes || {}).filter(Boolean).length;
+  const total = s.episodesTotal || s.nbEpisodes || 0;
+  const pct = total > 0 ? Math.round(seen / total * 100) : 0;
+
+  const seasonsHtml = (s.seasons || []).map(season => {
+    const eps = season.episodes || [];
+    const seenInSeason = eps.filter(e => s.seenEpisodes[`S${season.number}E${e.number}`]).length;
+    const allSeen = seenInSeason === eps.length && eps.length > 0;
+    return `
+      <div class="series-season">
+        <div class="series-season-header" onclick="toggleSeason(this)">
+          <span>Saison ${season.number} — ${season.name}</span>
+          <span class="season-progress">${seenInSeason}/${eps.length}</span>
+          <button class="btn-ghost season-all-btn" onclick="event.stopPropagation();markSeasonAll('${seriesId}',${season.number},${!allSeen})" style="font-size:.8rem;padding:4px 8px">
+            ${allSeen ? 'Tout décocher' : 'Tout cocher'}
+          </button>
+        </div>
+        <div class="series-episodes" hidden>
+          ${eps.map(e => `
+            <label class="episode-row">
+              <input type="checkbox" ${s.seenEpisodes[`S${season.number}E${e.number}`] ? 'checked' : ''}
+                onchange="toggleEpisodeSeen('${seriesId}',${season.number},${e.number});updateSeriesDetail('${seriesId}')">
+              <span class="ep-num">S${season.number}E${String(e.number).padStart(2,'0')}</span>
+              <span class="ep-name">${e.name}</span>
+              ${e.runtime ? `<span class="ep-runtime">${e.runtime}min</span>` : ''}
+            </label>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  const html = `
+    <div class="series-detail">
+      <div class="series-detail-header" style="background-image:url('${s.poster}')">
+        <div class="series-detail-overlay">
+          <button class="btn-ghost" onclick="go('library')" style="color:#fff">← Retour</button>
+          <button class="btn-ghost danger" onclick="if(confirm('Supprimer cette série ?'))removeSeries('${seriesId}')" style="float:right">🗑</button>
+        </div>
+      </div>
+      <div class="series-detail-body">
+        <h2>${s.name} ${s.year ? '('+s.year+')' : ''}</h2>
+        <div class="series-status-row">
+          <select onchange="setSeriesStatus('${seriesId}',this.value)" class="select">
+            ${Object.entries(SERIES_STATUS).map(([k,v]) => `<option value="${k}" ${s.watchStatus===k?'selected':''}>${v}</option>`).join('')}
+          </select>
+          <div class="series-rating">
+            ${[1,2,3,4,5].map(n => `<span onclick="setSeriesRating('${seriesId}',${n})" style="cursor:pointer;font-size:1.4rem">${n <= (s.rating||0) ? '★' : '☆'}</span>`).join('')}
+          </div>
+        </div>
+        <div class="series-progress-bar">
+          <div class="series-progress-fill" id="progress-fill-${seriesId}" style="width:${pct}%"></div>
+        </div>
+        <div class="series-progress-text" id="progress-text-${seriesId}">${seen} / ${total} épisodes vus (${pct}%)</div>
+        <p class="series-overview">${s.overview || ''}</p>
+        <div class="series-seasons">${seasonsHtml}</div>
+      </div>
+    </div>`;
+
+  const view = $('[data-view="series"]');
+  if (view) {
+    view.innerHTML = html;
+    view.hidden = false;
+    $('#series-grid') && ($('#series-grid').hidden = true);
+    $('#series-empty') && ($('#series-empty').hidden = true);
+  }
+  State.seriesDetailOpen = seriesId;
+}
+
+function toggleSeason(header) {
+  const eps = header.nextElementSibling;
+  if (eps) eps.hidden = !eps.hidden;
+}
+
+function markSeasonAll(seriesId, seasonNum, seen) {
+  const s = State.series.find(x => x.id === seriesId);
+  if (!s) return;
+  const season = s.seasons && s.seasons.find(ss => ss.number === seasonNum);
+  if (!season || !season.episodes) return;
+  season.episodes.forEach(e => {
+    s.seenEpisodes[`S${seasonNum}E${e.number}`] = seen;
+  });
+  const total = s.seasons.reduce((acc, ss) => acc + ss.episodeCount, 0);
+  s.episodesSeen = Object.values(s.seenEpisodes).filter(Boolean).length;
+  s.episodesTotal = total;
+  if (s.episodesSeen >= total && total > 0) s.watchStatus = 'completed';
+  saveSeries();
+  openSeriesDetail(seriesId);
+}
+
+function setSeriesStatus(seriesId, status) {
+  const s = State.series.find(x => x.id === seriesId);
+  if (s) { s.watchStatus = status; saveSeries(); }
+}
+
+function setSeriesRating(seriesId, rating) {
+  const s = State.series.find(x => x.id === seriesId);
+  if (s) { s.rating = rating; saveSeries(); openSeriesDetail(seriesId); }
+}
+
+function updateSeriesDetail(seriesId) {
+  const s = State.series.find(x => x.id === seriesId);
+  if (!s) return;
+  const seen = Object.values(s.seenEpisodes || {}).filter(Boolean).length;
+  const total = s.episodesTotal || 0;
+  const pct = total > 0 ? Math.round(seen / total * 100) : 0;
+  const fill = $(`#progress-fill-${seriesId}`);
+  const text = $(`#progress-text-${seriesId}`);
+  if (fill) fill.style.width = pct + '%';
+  if (text) text.textContent = `${seen} / ${total} épisodes vus (${pct}%)`;
+}
+
+async function showAddSeriesModal() {
+  const title = prompt('Nom de la série à rechercher :');
+  if (!title) return;
+  toast('Recherche en cours…');
+  try {
+    const results = await tmdbSearchSeries(title, State.settings.apiKey);
+    if (!results.length) { alert('Aucune série trouvée.'); return; }
+
+    // Afficher picker résultats
+    const pickerHtml = results.map((s, i) => `
+      <div class="series-picker-item" onclick="selectSeriesResult(${i})">
+        <img src="${s.poster || ''}" onerror="this.style.display='none'" style="width:50px;height:75px;object-fit:cover;border-radius:6px">
+        <div>
+          <div style="font-weight:700">${s.name}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">${s.year}</div>
+        </div>
+      </div>`).join('');
+
+    const modal = document.createElement('div');
+    modal.id = 'series-picker';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;overflow-y:auto;padding:20px';
+    modal.innerHTML = `
+      <div style="max-width:500px;margin:0 auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="color:#fff;margin:0">Choisir une série</h3>
+          <button onclick="document.getElementById('series-picker').remove()" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer">✕</button>
+        </div>
+        <div id="series-picker-results">${pickerHtml}</div>
+      </div>`;
+    document.body.appendChild(modal);
+    window._seriesPickerResults = results;
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+async function selectSeriesResult(idx) {
+  const s = window._seriesPickerResults[idx];
+  document.getElementById('series-picker') && document.getElementById('series-picker').remove();
+  toast('Chargement de la série…');
+  try {
+    const details = await tmdbSeriesDetails(s.tmdbId, State.settings.apiKey);
+    addSeries(details);
+    toast('✅ ' + details.name + ' ajoutée !');
+    renderSeries();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
 function bindMediaToggle() {
   const btnFilms = $('#toggle-films');
   const btnSeries = $('#toggle-series');
@@ -2329,6 +2617,9 @@ function bindMediaToggle() {
 
   if (btnFilms) btnFilms.addEventListener('click', showFilms);
   if (btnSeries) btnSeries.addEventListener('click', showSeries);
+
+  // Charger les séries au démarrage
+  loadSeries();
 }
 
 function renderSeries() {
@@ -2500,7 +2791,10 @@ function bindEvents() {
   $('#sheet-backdrop').addEventListener('click', closeSheet);
   $('#act-cancel').addEventListener('click', closeSheet);
   $('#act-import').addEventListener('click', startImportFlow);
-  $('[data-action="add"]')?.addEventListener('click', startImportFlow);
+  $('[data-action="add"]')?.addEventListener('click', () => {
+    if (State.mediaMode === 'series') showAddSeriesModal();
+    else startImportFlow();
+  });
 
   // Scanner
   $('#scanner-close').addEventListener('click', () => Scanner.stop());
