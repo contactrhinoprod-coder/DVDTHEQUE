@@ -2786,6 +2786,27 @@ function showSeries() {
   const detail = $('#series-detail');
   if (detail) detail.hidden = true;
   State.seriesSearch = '';
+  State.seriesStatusFilter = '';
+
+  // Brancher les listeners après innerHTML
+  const searchInput = $('#series-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      State.seriesSearch = searchInput.value;
+      renderSeries();
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.target.blur(); renderSeries(); }
+    });
+  }
+  $$('.status-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.status-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      State.seriesStatusFilter = btn.dataset.status;
+      renderSeries();
+    });
+  });
 
   renderSeries();
 }
