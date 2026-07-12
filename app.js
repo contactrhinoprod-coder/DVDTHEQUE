@@ -2725,6 +2725,7 @@ function renderSeries() {
   const empty = $('#series-empty');
   if (!grid) return;
   const series = State.series || [];
+
   if (series.length === 0) {
     grid.hidden = true;
     if (empty) empty.hidden = false;
@@ -2732,18 +2733,42 @@ function renderSeries() {
   }
   if (empty) empty.hidden = true;
   grid.hidden = false;
-  grid.innerHTML = series.map(s => `
-    <div class="card" data-id="${s.id}" onclick="openSeriesDetail('${s.id}')">
-      <div class="card-poster" style="background-image:url('${s.poster || ''}')">
-        <span class="card-badge">${s.status || 'En cours'}</span>
+  grid.className = 'grid' + (State.layout === 'list' ? ' list' : '');
+
+  grid.innerHTML = series.map(s => {
+    const seen = s.episodesSeen || 0;
+    const total = s.episodesTotal || s.nbEpisodes || 0;
+    const pct = total > 0 ? Math.round(seen / total * 100) : 0;
+    const poster = s.poster ? `style="background-image:url('${s.poster.replace(/'/g, "%27")}')"` : '';
+    const initial = (s.name || '?').charAt(0).toUpperCase();
+    if (State.layout === 'list') {
+      return `<div class="card" data-id="${s.id}">
+        <div class="poster-wrap"><div class="poster" ${poster}>${s.poster ? '' : initial}</div></div>
+        <div class="meta">
+          <div class="t">${esc(s.name)}</div>
+          <div class="sub">${s.year || '—'} · ${s.nbSeasons || '?'} saisons</div>
+          <div class="sub" style="color:var(--accent)">${seen}/${total} ép. · ${pct}%</div>
+        </div>
+      </div>`;
+    }
+    return `<div class="card" data-id="${s.id}">
+      <div class="poster-wrap">
+        <div class="poster" ${poster}>${s.poster ? '' : initial}</div>
+        <span class="fmt-badge">TV</span>
       </div>
-      <div class="card-info">
-        <div class="card-title">${s.name}</div>
-        <div class="card-meta">${s.year || ''}</div>
-        <div class="card-progress">${s.episodesSeen || 0} / ${s.episodesTotal || '?'} ep.</div>
+      <div class="meta">
+        <div class="t">${esc(s.name)}</div>
+        <div class="y">${s.year || ''}</div>
+        <div class="series-mini-progress">
+          <div class="series-mini-bar" style="width:${pct}%"></div>
+        </div>
+        <div style="font-size:.75rem;color:var(--accent);font-weight:600">${seen}/${total} ép.</div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+
+  $$('.card', grid).forEach(c =>
+    c.addEventListener('click', () => openSeriesDetail(c.dataset.id)));
 }
 
 function bindLogin() {
