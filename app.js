@@ -623,8 +623,8 @@ const scrollSave = { library: 0, wishlist: 0 };
 function go(view, opts = {}) {
   // Gérer les vues séries
   if (view === 'series-list') { showSeries && showSeries(); return; }
-  if (view === 'series-search') { showAddSeriesModal && showAddSeriesModal(); return; }
-  if (view === 'series-stats') { showSeriesStats && showSeriesStats(); return; }
+  if (view === 'series-quiz') { showSeriesQuiz && showSeriesQuiz(); return; }
+  if (view === 'series-profile') { showSeriesProfile && showSeriesProfile(); return; }
 
   // Si on revient sur une vue films depuis le mode séries, reswitcher
   if (State.mediaMode === 'series') {
@@ -2663,6 +2663,143 @@ async function tmdbSeasonDetails(tmdbId, seasonNum, key) {
     airDate: e.air_date || '',
     runtime: e.runtime || 0,
   }));
+}
+
+function showSeriesQuiz() {
+  const series = State.series || [];
+  const seriesView = $('[data-view="series"]');
+  if (!seriesView) return;
+
+  $$('.view').forEach(v => v.hidden = true);
+  seriesView.hidden = false;
+  $('#topbar-title').textContent = 'Quiz Séries';
+  document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
+  const quizTab = document.querySelector('[data-go="series-quiz"]');
+  if (quizTab) quizTab.classList.add('active');
+
+  // Séries avec au moins des épisodes vus
+  const eligible = series.filter(s => s.episodesSeen > 0 || s.seasons);
+  if (eligible.length < 2) {
+    seriesView.innerHTML = `<div style="padding:40px;text-align:center">
+      <div style="font-size:3rem">❓</div>
+      <p style="color:var(--text-dim);margin-top:16px">Ajoutez au moins 2 séries pour jouer au quiz.</p>
+    </div>`;
+    return;
+  }
+
+  // Générer une question
+  const s = eligible[Math.floor(Math.random() * eligible.length)];
+  const wrong = eligible.filter(x => x.id !== s.id).sort(() => Math.random() - 0.5).slice(0, 3);
+  const options = [...wrong, s].sort(() => Math.random() - 0.5);
+  const types = ['name', 'year', 'genre'];
+  const type = types[Math.floor(Math.random() * types.length)];
+
+  let question = '';
+  if (type === 'name') question = `Quelle série a ${s.nbSeasons || '?'} saison(s) et ${s.nbEpisodes || '?'} épisodes ?`;
+  else if (type === 'year') question = `Quelle série a commencé en ${s.year || '?'} ?`;
+  else if (type === 'genre') question = `Quelle série appartient au genre ${(s.genres||['?'])[0]} ?`;
+
+  seriesView.innerHTML = `
+    <div style="padding:20px">
+      <h2 style="margin-bottom:8px">❓ Quiz Séries</h2>
+      <div style="background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:20px">
+        ${s.poster ? `<img src="${s.poster}" style="width:100%;height:200px;object-fit:cover;object-position:top">` : ''}
+      </div>
+      <p style="font-size:1.1rem;font-weight:600;margin-bottom:20px">${question}</p>
+      <div style="display:flex;flex-direction:column;gap:10px" id="quiz-series-options">
+        ${options.map(o => `
+          <button onclick="checkSeriesQuiz(this,'${o.id}','${s.id}')"
+            style="padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--surface);color:var(--text);font-size:1rem;cursor:pointer;text-align:left">
+            ${o.name}
+          </button>`).join('')}
+      </div>
+      <button onclick="showSeriesQuiz()" style="margin-top:20px;width:100%;padding:14px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:1rem;cursor:pointer">
+        Autre question
+      </button>
+    </div>`;
+}
+
+function checkSeriesQuiz(btn, selectedId, correctId) {
+  document.querySelectorAll('#quiz-series-options button').forEach(b => b.disabled = true);
+  if (selectedId === correctId) {
+    btn.style.background = '#22c55e'; btn.style.color = '#fff'; btn.style.borderColor = '#22c55e';
+  } else {
+    btn.style.background = '#ef4444'; btn.style.color = '#fff'; btn.style.borderColor = '#ef4444';
+    document.querySelectorAll('#quiz-series-options button').forEach(b => {
+      const id = b.getAttribute('onclick').match(/'([^']+)','([^']+)'/);
+      if (id && id[1] === correctId) { b.style.background = '#22c55e'; b.style.color = '#fff'; b.style.borderColor = '#22c55e'; }
+    });
+  }
+}
+
+function showSeriesProfile() {
+  const series = State.series || [];
+  const seriesView = $('[data-view="series"]');
+  if (!seriesView) return;
+
+  $$('.view').forEach(v => v.hidden = true);
+  seriesView.hidden = false;
+  $('#topbar-title').textContent = 'Profil Séries';
+  document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
+  const profileTab = document.querySelector('[data-go="series-profile"]');
+  if (profileTab) profileTab.classList.add('active');
+
+  const total = series.length;
+  const completed = series.filter(s => s.watchStatus === 'completed').length;
+  const watching = series.filter(s => s.watchStatus === 'watching').length;
+  const plantowatch = series.filter(s => s.watchStatus === 'plantowatch').length;
+  const dropped = series.filter(s => s.watchStatus === 'dropped').length;
+  const totalEp = series.reduce((acc, s) => acc + (s.episodesSeen || 0), 0);
+  const totalMin = series.reduce((acc, s) => {
+    const avgRuntime = 45;
+    return acc + (s.episodesSeen || 0) * avgRuntime;
+  }, 0);
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+
+  // Genres favoris
+  const genreCount = {};
+  series.forEach(s => (s.genres||[]).forEach(g => genreCount[g] = (genreCount[g]||0) + 1));
+  const topGenres = Object.entries(genreCount).sort((a,b) => b[1]-a[1]).slice(0, 3);
+
+  seriesView.innerHTML = `
+    <div style="padding:20px;padding-bottom:120px">
+      <h2 style="margin-bottom:20px">☰ Profil Séries</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${total}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Séries</div>
+        </div>
+        <div style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${totalEp}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Épisodes vus</div>
+        </div>
+        <div style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${hours}h${mins}m</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Temps estimé</div>
+        </div>
+        <div style="background:var(--surface);border-radius:16px;padding:16px;text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:#22c55e">${completed}</div>
+          <div style="color:var(--text-dim);font-size:.85rem">Terminées</div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-weight:700;margin-bottom:12px">Statuts</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between"><span>▶ En cours</span><span style="color:var(--accent);font-weight:700">${watching}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>🔖 À voir</span><span style="color:var(--accent);font-weight:700">${plantowatch}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>❌ Abandonné</span><span style="color:var(--accent);font-weight:700">${dropped}</span></div>
+        </div>
+      </div>
+      ${topGenres.length > 0 ? `
+      <div style="background:var(--surface);border-radius:16px;padding:16px">
+        <div style="font-weight:700;margin-bottom:12px">🎭 Genres favoris</div>
+        ${topGenres.map(([g, n]) => `
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <span>${g}</span><span style="color:var(--accent);font-weight:700">${n}</span>
+          </div>`).join('')}
+      </div>` : ''}
+    </div>`;
 }
 
 function showSeriesStats() {
