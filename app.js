@@ -2724,7 +2724,14 @@ function renderSeries() {
   const grid = $('#series-grid');
   const empty = $('#series-empty');
   if (!grid) return;
-  const series = State.series || [];
+  let series = State.series || [];
+
+  const noAccent = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const q = noAccent(State.seriesSearch || '');
+  if (q) series = series.filter(s =>
+    noAccent(s.name).includes(q) ||
+    noAccent((s.genres||[]).join(' ')).includes(q)
+  );
 
   if (series.length === 0) {
     grid.hidden = true;
