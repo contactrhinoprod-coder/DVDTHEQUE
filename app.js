@@ -2589,6 +2589,20 @@ function bindMediaToggle() {
   const libraryTotal = $('#library-total');
   const activeFilters = $('#active-filters');
 
+  function switchTabbar(mode) {
+    document.querySelectorAll('.tab-films').forEach(t => t.hidden = (mode === 'series'));
+    document.querySelectorAll('.tab-series').forEach(t => t.hidden = (mode === 'films'));
+    // Réinitialiser onglet actif
+    document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
+    if (mode === 'films') {
+      const libTab = document.querySelector('[data-go="library"]');
+      if (libTab) libTab.classList.add('active');
+    } else {
+      const seriesTab = document.querySelector('[data-go="series-list"]');
+      if (seriesTab) seriesTab.classList.add('active');
+    }
+  }
+
   function showFilms() {
     btnFilms.classList.add('active');
     btnSeries.classList.remove('active');
@@ -2599,6 +2613,7 @@ function bindMediaToggle() {
     if (seriesEmpty) seriesEmpty.hidden = true;
     if (activeFilters) activeFilters.hidden = false;
     State.mediaMode = 'films';
+    switchTabbar('films');
     renderLibrary();
   }
 
@@ -2612,6 +2627,7 @@ function bindMediaToggle() {
     if (libraryTotal) libraryTotal.hidden = true;
     if (libraryEmpty) libraryEmpty.hidden = true;
     State.mediaMode = 'series';
+    switchTabbar('series');
     renderSeries();
   }
 
